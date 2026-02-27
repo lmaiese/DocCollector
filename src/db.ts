@@ -93,20 +93,100 @@ export function initDb() {
     const tenantId = uuidv4();
     db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').run(tenantId, 'Demo Studio');
     
-    // Create admin user
-    const userId = uuidv4();
+    // Create superadmin
+    const superAdminId = uuidv4();
     db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
-      userId, tenantId, 'admin@demo.com', 'Admin User', 'admin'
+      superAdminId, 'system', 'super@admin.com', 'Super Admin', 'superadmin'
     );
 
-    // Create a sample client
-    const clientId = uuidv4();
-    db.prepare('INSERT INTO clients (id, tenant_id, name, internal_code, tax_id) VALUES (?, ?, ?, ?, ?)').run(
-      clientId, tenantId, 'Acme Corp', 'ACME001', 'IT12345678901'
+    // Tenant 1: Demo Studio
+    const tenant1Id = uuidv4();
+    db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').run(tenant1Id, 'Studio Rossi (Demo)');
+    
+    const admin1Id = uuidv4();
+    db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
+      admin1Id, tenant1Id, 'admin@rossi.com', 'Mario Rossi', 'admin'
     );
 
-    console.log('Database seeded with demo tenant and user.');
+    // Clients for Tenant 1
+    const clients1 = [
+      { name: 'Acme Corp', code: 'ACM01', tax: 'IT12345678901' },
+      { name: 'Omega Solutions', code: 'OMG02', tax: 'IT98765432109' },
+      { name: 'Beta Logistics', code: 'BTA03', tax: 'IT11223344556' }
+    ];
+
+    for (const c of clients1) {
+      const cid = uuidv4();
+      db.prepare('INSERT INTO clients (id, tenant_id, name, internal_code, tax_id) VALUES (?, ?, ?, ?, ?)').run(
+        cid, tenant1Id, c.name, c.code, c.tax
+      );
+      
+      // Client User
+      db.prepare('INSERT INTO users (id, tenant_id, email, name, role, client_id) VALUES (?, ?, ?, ?, ?, ?)').run(
+        uuidv4(), tenant1Id, `contact@${c.code.toLowerCase()}.com`, `${c.name} Contact`, 'client', cid
+      );
+
+      // Mock Requests
+      const types = ['FATT', 'CUD', 'BANK'];
+      const periods = ['202310', '202311', '202312', '202401'];
+      
+      for (const p of periods) {
+        const type = types[Math.floor(Math.random() * types.length)];
+        const rid = uuidv4();
+        const status = Math.random() > 0.5 ? 'uploaded' : 'pending';
+        
+        db.prepare('INSERT INTO requests (id, tenant_id, client_id, period, type, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+          rid, tenant1Id, cid, p, type, status, new Date().toISOString()
+        );
+
+        if (status === 'uploaded') {
+           db.prepare('INSERT INTO documents (id, tenant_id, request_id, filename, original_filename, path, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+             uuidv4(), tenant1Id, rid, `${c.name}_${p}_${type}.pdf`, 'doc.pdf', 'mock/path', admin1Id
+           );
+        }
+      }
+    }
+
+    // Tenant 2: Studio Bianchi
+    const tenant2Id = uuidv4();
+    db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').run(tenant2Id, 'Studio Bianchi');
+    
+    const admin2Id = uuidv4();
+    db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
+      admin2Id, tenant2Id, 'admin@bianchi.com', 'Luigi Bianchi', 'admin'
+    );
+
+     // Clients for Tenant 2
+     const clients2 = [
+      { name: 'Gamma Services', code: 'GMA01', tax: 'IT55667788990' },
+      { name: 'Delta Force', code: 'DLT02', tax: 'IT00998877665' }
+    ];
+
+    for (const c of clients2) {
+      const cid = uuidv4();
+      db.prepare('INSERT INTO clients (id, tenant_id, name, internal_code, tax_id) VALUES (?, ?, ?, ?, ?)').run(
+        cid, tenant2Id, c.name, c.code, c.tax
+      );
+    }
+
+    console.log('Database seeded with Super Admin, 2 Tenants, Clients, and Mock Data.');
+  } else {
+    // Ensure superadmin exists for existing installations
+    const superAdmin = db.prepare("SELECT * FROM users WHERE role = 'superadmin' LIMIT 1").get();
+    if (!superAdmin) {
+       db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
+        uuidv4(), 'system', 'super@admin.com', 'Super Admin', 'superadmin'
+      );
+      console.log('Added missing Super Admin.');
+    }
   }
+}
+
+// Migration helper to ensure client_id exists (for existing DBs)
+try {
+  db.exec('ALTER TABLE users ADD COLUMN client_id TEXT REFERENCES clients(id)');
+} catch (e) {
+  // Column likely exists
 }
 
 export default db;

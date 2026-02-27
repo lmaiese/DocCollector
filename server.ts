@@ -22,44 +22,154 @@ async function startServer() {
 
   // Auth (Mock for preview)
   app.post('/api/auth/login', (req, res) => {
-    // In a real app, this would redirect to OAuth provider
-    // For preview, we just return the first user found or create a session
-    const user = db.prepare('SELECT * FROM users LIMIT 1').get();
+    const { role } = req.body; // 'admin', 'client', 'superadmin'
+    
+    let user;
+    if (role === 'client') {
+      user = db.prepare("SELECT * FROM users WHERE role = 'client' LIMIT 1").get();
+    } else if (role === 'superadmin') {
+      user = db.prepare("SELECT * FROM users WHERE role = 'superadmin' LIMIT 1").get();
+    } else {
+      // Default to the first admin of the first tenant for 'admin' role
+      // In a real app, user would enter email/password
+      user = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
+    }
+
     if (user) {
       res.json({ user, token: 'mock-token' });
     } else {
-      res.status(401).json({ error: 'No users found' });
+      res.status(401).json({ error: 'No user found for this role' });
     }
   });
 
   // Dashboard Stats
   app.get('/api/dashboard', (req, res) => {
-    const pendingRequests = db.prepare("SELECT count(*) as count FROM requests WHERE status = 'pending'").get() as { count: number };
-    const uploadedDocs = db.prepare("SELECT count(*) as count FROM documents").get() as { count: number };
-    const missingDocs = pendingRequests.count; // Simplified logic: pending = missing
+    const userId = req.headers['x-user-id'] as string;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    // Superadmin sees global stats
+    if (user.role === 'superadmin') {
+      const totalTenants = db.prepare("SELECT count(*) as count FROM tenants").get() as { count: number };
+      const totalUsers = db.prepare("SELECT count(*) as count FROM users").get() as { count: number };
+      const totalDocs = db.prepare("SELECT count(*) as count FROM documents").get() as { count: number };
+      
+      return res.json({
+        pendingRequests: totalTenants.count, // Hack to reuse UI card
+        uploadedDocs: totalDocs.count,
+        missingDocs: totalUsers.count, // Hack to reuse UI card
+        isSuperAdmin: true
+      });
+    }
+
+    // Tenant Scoped Stats
+    let pendingQuery = `SELECT count(*) as count FROM requests WHERE tenant_id = '${user.tenant_id}' AND status = 'pending'`;
+    let uploadedQuery = `SELECT count(*) as count FROM documents WHERE tenant_id = '${user.tenant_id}'`;
+    
+    if (user.role === 'client') {
+      pendingQuery += ` AND client_id = '${user.client_id}'`;
+      uploadedQuery = `
+        SELECT count(*) as count 
+        FROM documents d
+        JOIN requests r ON d.request_id = r.id
+        WHERE r.client_id = '${user.client_id}'
+      `;
+    }
+
+    const pendingRequests = db.prepare(pendingQuery).get() as { count: number };
+    const uploadedDocs = db.prepare(uploadedQuery).get() as { count: number };
+    
+    // Calculate missing docs (pending requests)
+    const missingDocs = pendingRequests.count;
+
+    // Get recent activity (last 7 days requests) for chart
+    const chartData = db.prepare(`
+        SELECT date(created_at) as date, count(*) as count 
+        FROM requests 
+        WHERE tenant_id = ? 
+        GROUP BY date(created_at) 
+        ORDER BY date(created_at) DESC 
+        LIMIT 7
+    `).all(user.tenant_id);
 
     res.json({
       pendingRequests: pendingRequests.count,
       uploadedDocs: uploadedDocs.count,
-      missingDocs
+      missingDocs,
+      chartData
     });
+  });
+
+  // Tenants (Superadmin only)
+  app.get('/api/tenants', (req, res) => {
+    const userId = req.headers['x-user-id'] as string;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    
+    if (!user || user.role !== 'superadmin') return res.status(403).json({ error: 'Forbidden' });
+
+    const tenants = db.prepare('SELECT * FROM tenants ORDER BY name').all();
+    res.json(tenants);
+  });
+
+  app.post('/api/tenants', (req, res) => {
+    const userId = req.headers['x-user-id'] as string;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    
+    if (!user || user.role !== 'superadmin') return res.status(403).json({ error: 'Forbidden' });
+
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+
+    const id = uuidv4();
+    try {
+      db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').run(id, name);
+      
+      // Create a default admin for this tenant
+      const adminId = uuidv4();
+      const adminEmail = `admin@${name.toLowerCase().replace(/\s+/g, '')}.com`;
+      db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
+        adminId, id, adminEmail, 'Admin User', 'admin'
+      );
+
+      res.json({ id, name, adminEmail });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Clients
   app.get('/api/clients', (req, res) => {
-    const clients = db.prepare('SELECT * FROM clients ORDER BY name').all();
+    const userId = req.headers['x-user-id'] as string;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    if (user.role === 'superadmin') {
+       // Superadmin sees all clients with tenant info
+       const clients = db.prepare(`
+         SELECT c.*, t.name as tenant_name 
+         FROM clients c 
+         JOIN tenants t ON c.tenant_id = t.id 
+         ORDER BY t.name, c.name
+       `).all();
+       return res.json(clients);
+    }
+
+    const clients = db.prepare('SELECT * FROM clients WHERE tenant_id = ? ORDER BY name').all(user.tenant_id);
     res.json(clients);
   });
 
   app.post('/api/clients', (req, res) => {
+    const userId = req.headers['x-user-id'] as string;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    if (!user || user.role === 'client') return res.status(403).json({ error: 'Forbidden' });
+
     const { name, internal_code, tax_id } = req.body;
     const id = uuidv4();
-    // Hardcoded tenant for demo
-    const tenant = db.prepare('SELECT id FROM tenants LIMIT 1').get() as { id: string };
     
     try {
       db.prepare('INSERT INTO clients (id, tenant_id, name, internal_code, tax_id) VALUES (?, ?, ?, ?, ?)').run(
-        id, tenant.id, name, internal_code, tax_id
+        id, user.tenant_id, name, internal_code, tax_id
       );
       res.json({ id, name, internal_code, tax_id });
     } catch (err: any) {
@@ -69,29 +179,48 @@ async function startServer() {
 
   // Requests
   app.get('/api/requests', (req, res) => {
-    const requests = db.prepare(`
-      SELECT r.*, c.name as client_name 
+    const userId = req.headers['x-user-id'] as string;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    let query = `
+      SELECT r.*, c.name as client_name, d.id as document_id, d.filename as document_filename
       FROM requests r 
       JOIN clients c ON r.client_id = c.id 
-      ORDER BY r.created_at DESC
-    `).all();
+      LEFT JOIN documents d ON r.id = d.request_id
+    `;
+
+    if (user.role === 'superadmin') {
+       // See all requests
+    } else {
+       query += ` WHERE r.tenant_id = '${user.tenant_id}'`;
+       if (user.role === 'client') {
+         query += ` AND r.client_id = '${user.client_id}'`;
+       }
+    }
+
+    query += ` ORDER BY r.created_at DESC`;
+
+    const requests = db.prepare(query).all();
     res.json(requests);
   });
 
   app.post('/api/requests', (req, res) => {
+    const userId = req.headers['x-user-id'] as string;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    if (!user || user.role === 'client') return res.status(403).json({ error: 'Forbidden' });
+
     const { client_id, period, type } = req.body;
     const id = uuidv4();
-    const tenant = db.prepare('SELECT id FROM tenants LIMIT 1').get() as { id: string };
-
+    
     try {
       db.prepare('INSERT INTO requests (id, tenant_id, client_id, period, type) VALUES (?, ?, ?, ?, ?)').run(
-        id, tenant.id, client_id, period, type
+        id, user.tenant_id, client_id, period, type
       );
       
       // Log audit
-      const user = db.prepare('SELECT id FROM users LIMIT 1').get() as { id: string };
       db.prepare('INSERT INTO audit_logs (id, tenant_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)').run(
-        uuidv4(), tenant.id, user.id, 'CREATE_REQUEST', `Request for ${client_id} ${period} ${type}`
+        uuidv4(), user.tenant_id, user.id, 'CREATE_REQUEST', `Request for ${client_id} ${period} ${type}`
       );
 
       res.json({ id, status: 'pending' });
@@ -141,6 +270,90 @@ async function startServer() {
       );
 
       res.json({ success: true, filename: newFilename });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Download
+  app.get('/api/documents/:id/download', async (req, res) => {
+    const { id } = req.params;
+    const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id) as any;
+    
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+    try {
+      const fileBuffer = await storageService.download(doc.path);
+      
+      res.setHeader('Content-Disposition', `attachment; filename="${doc.filename}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.send(fileBuffer);
+      
+      // Audit download
+      // Note: In a real app we'd get user from auth middleware/header
+      // For simplicity we skip audit here or need to pass user id in query param
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Delete Request
+  app.delete('/api/requests/:id', (req, res) => {
+    const { id } = req.params;
+    const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(id) as any;
+    
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (request.status === 'uploaded') {
+      return res.status(400).json({ error: 'Cannot delete request with uploaded document. Delete document first.' });
+    }
+
+    try {
+      db.prepare('DELETE FROM requests WHERE id = ?').run(id);
+      
+      // Audit
+      const userId = req.headers['x-user-id'] as string; // Assuming passed
+      if (userId) {
+        const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+        if (user) {
+          db.prepare('INSERT INTO audit_logs (id, tenant_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)').run(
+            uuidv4(), user.tenant_id, user.id, 'DELETE_REQUEST', `Deleted request ${id}`
+          );
+        }
+      }
+      
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Delete Document
+  app.delete('/api/documents/:id', async (req, res) => {
+    const { id } = req.params;
+    const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id) as any;
+    
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+    try {
+      await storageService.delete(doc.path);
+      
+      db.prepare('DELETE FROM documents WHERE id = ?').run(id);
+      db.prepare("UPDATE requests SET status = 'pending' WHERE id = ?").run(doc.request_id);
+
+      // Audit
+      const userId = req.headers['x-user-id'] as string;
+      if (userId) {
+        const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+        if (user) {
+          db.prepare('INSERT INTO audit_logs (id, tenant_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)').run(
+            uuidv4(), user.tenant_id, user.id, 'DELETE_DOCUMENT', `Deleted document ${doc.filename}`
+          );
+        }
+      }
+
+      res.json({ success: true });
     } catch (err: any) {
       console.error(err);
       res.status(500).json({ error: err.message });

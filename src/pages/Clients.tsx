@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Search } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface Client {
   id: string;
@@ -36,9 +37,13 @@ export default function Clients() {
         setShowForm(false);
         setFormData({ name: '', internal_code: '', tax_id: '' });
         fetchClients();
+        toast.success('Client added successfully');
+      } else {
+        toast.error('Failed to add client');
       }
     } catch (err) {
       console.error(err);
+      toast.error('Error adding client');
     }
   };
 

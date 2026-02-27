@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Upload, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Upload, CheckCircle, Clock, Download, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface Request {
   id: string;
@@ -8,6 +9,8 @@ interface Request {
   type: string;
   status: 'pending' | 'uploaded';
   created_at: string;
+  document_id?: string;
+  document_filename?: string;
 }
 
 interface Client {
@@ -22,13 +25,19 @@ export default function Requests() {
   const [formData, setFormData] = useState({ client_id: '', period: '', type: 'FATT' });
   const [uploadingId, setUploadingId] = useState<string | null>(null);
 
+  const [user, setUser] = useState<any>(null);
+
   useEffect(() => {
-    fetchRequests();
+    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+    setUser(storedUser);
+    fetchRequests(storedUser);
     fetchClients();
   }, []);
 
-  const fetchRequests = () => {
-    fetch('/api/requests')
+  const fetchRequests = (currentUser: any) => {
+    fetch('/api/requests', {
+      headers: { 'x-user-id': currentUser.id }
+    })
       .then(res => res.json())
       .then(data => setRequests(data))
       .catch(err => console.error(err));
@@ -52,10 +61,14 @@ export default function Requests() {
       if (res.ok) {
         setShowForm(false);
         setFormData({ client_id: '', period: '', type: 'FATT' });
-        fetchRequests();
+        fetchRequests(user);
+        toast.success('Request created successfully');
+      } else {
+        toast.error('Failed to create request');
       }
     } catch (err) {
       console.error(err);
+      toast.error('Error creating request');
     }
   };
 
@@ -65,21 +78,65 @@ export default function Requests() {
     formData.append('request_id', requestId);
 
     setUploadingId(requestId);
+    const toastId = toast.loading('Uploading document...');
+    
     try {
       const res = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
       if (res.ok) {
-        fetchRequests();
+        fetchRequests(user);
+        toast.success('Document uploaded successfully', { id: toastId });
       } else {
-        alert('Upload failed');
+        const data = await res.json();
+        toast.error(data.error || 'Upload failed', { id: toastId });
       }
     } catch (err) {
       console.error(err);
-      alert('Upload error');
+      toast.error('Upload error', { id: toastId });
     } finally {
       setUploadingId(null);
+    }
+  };
+
+  const handleDeleteRequest = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this request?')) return;
+    try {
+      const res = await fetch(`/api/requests/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': user.id }
+      });
+      if (res.ok) {
+        fetchRequests(user);
+        toast.success('Request deleted');
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Delete failed');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Delete error');
+    }
+  };
+
+  const handleDeleteDocument = async (docId: string) => {
+    if (!confirm('Are you sure you want to delete this document? The request will revert to pending.')) return;
+    try {
+      const res = await fetch(`/api/documents/${docId}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': user.id }
+      });
+      if (res.ok) {
+        fetchRequests(user);
+        toast.success('Document deleted');
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Delete failed');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Delete error');
     }
   };
 
@@ -87,13 +144,15 @@ export default function Requests() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Document Requests</h2>
-        <button 
-          onClick={() => setShowForm(true)}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Request
-        </button>
+        {user?.role !== 'client' && (
+          <button 
+            onClick={() => setShowForm(true)}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Request
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -182,21 +241,52 @@ export default function Requests() {
                   )}
                 </td>
                 <td className="p-4">
-                  {req.status === 'pending' && (
-                    <label className="cursor-pointer bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors">
-                      <Upload className="w-4 h-4" />
-                      {uploadingId === req.id ? 'Uploading...' : 'Upload'}
-                      <input 
-                        type="file" 
-                        className="hidden" 
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) {
-                            handleUpload(req.id, e.target.files[0]);
-                          }
-                        }}
-                        disabled={uploadingId === req.id}
-                      />
-                    </label>
+                  {req.status === 'uploaded' && req.document_id ? (
+                    <div className="flex items-center gap-3">
+                      <a 
+                        href={`/api/documents/${req.document_id}/download`}
+                        className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 text-sm font-medium"
+                        download
+                      >
+                        <Download className="w-4 h-4" />
+                        Download
+                      </a>
+                      <button
+                        onClick={() => handleDeleteDocument(req.document_id!)}
+                        className="text-red-500 hover:text-red-700"
+                        title="Delete Document"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    req.status === 'pending' && (
+                    <div className="flex items-center gap-3">
+                      <label className="cursor-pointer bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 w-fit transition-colors">
+                        <Upload className="w-4 h-4" />
+                        {uploadingId === req.id ? 'Uploading...' : 'Upload'}
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) {
+                              handleUpload(req.id, e.target.files[0]);
+                            }
+                          }}
+                          disabled={uploadingId === req.id}
+                        />
+                      </label>
+                      {user?.role !== 'client' && (
+                        <button
+                          onClick={() => handleDeleteRequest(req.id)}
+                          className="text-gray-400 hover:text-red-600 transition-colors"
+                          title="Delete Request"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    )
                   )}
                 </td>
               </tr>

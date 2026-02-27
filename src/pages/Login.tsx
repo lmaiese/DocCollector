@@ -1,13 +1,37 @@
 import React from 'react';
-import { LogIn } from 'lucide-react';
+import { LogIn, Users, ShieldAlert } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
 interface LoginProps {
-  onLogin: () => void;
+  onLoginSuccess: (user: any) => void;
 }
 
-export default function Login({ onLogin }: LoginProps) {
+export default function Login({ onLoginSuccess }: LoginProps) {
+  const handleLogin = (role: 'admin' | 'client' | 'superadmin') => {
+    const toastId = toast.loading('Signing in...');
+
+    fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role })
+    })
+    .then(res => {
+      if (res.ok) return res.json();
+      throw new Error('Login failed');
+    })
+    .then(data => {
+      toast.success('Signed in successfully', { id: toastId });
+      onLoginSuccess(data.user);
+    })
+    .catch(err => {
+      console.error(err);
+      toast.error('Login failed', { id: toastId });
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <Toaster position="top-right" />
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
         <div className="mb-6 flex justify-center">
           <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -19,19 +43,27 @@ export default function Login({ onLogin }: LoginProps) {
         
         <div className="space-y-4">
           <button 
-            onClick={onLogin}
+            onClick={() => handleLogin('admin')}
             className="w-full flex items-center justify-center gap-3 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5 bg-white rounded-full p-0.5" />
-            Sign in with Google
+            Sign in as Operator (Google)
           </button>
           
           <button 
-            onClick={onLogin}
-            className="w-full flex items-center justify-center gap-3 bg-gray-900 text-white py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors font-medium"
+            onClick={() => handleLogin('client')}
+            className="w-full flex items-center justify-center gap-3 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
           >
-            <img src="https://www.svgrepo.com/show/452263/microsoft.svg" alt="Microsoft" className="w-5 h-5" />
-            Sign in with Microsoft
+            <Users className="w-5 h-5" />
+            Sign in as Client (Demo)
+          </button>
+
+          <button 
+            onClick={() => handleLogin('superadmin')}
+            className="w-full flex items-center justify-center gap-3 bg-gray-800 text-white py-3 px-4 rounded-lg hover:bg-gray-900 transition-colors font-medium"
+          >
+            <ShieldAlert className="w-5 h-5" />
+            Sign in as Super Admin
           </button>
         </div>
         

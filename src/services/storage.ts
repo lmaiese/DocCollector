@@ -4,6 +4,7 @@ import path from 'path';
 export interface StorageService {
   upload(file: Express.Multer.File, destinationPath: string): Promise<string>;
   download(path: string): Promise<Buffer>;
+  delete(path: string): Promise<void>;
 }
 
 export class LocalStorageService implements StorageService {
@@ -38,6 +39,13 @@ export class LocalStorageService implements StorageService {
     }
     throw new Error('File not found');
   }
+
+  async delete(filePath: string): Promise<void> {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    // If file doesn't exist, we consider it deleted
+  }
 }
 
 // Placeholder for Google Drive
@@ -50,6 +58,9 @@ export class GoogleDriveService implements StorageService {
   async download(path: string): Promise<Buffer> {
     throw new Error('Not implemented');
   }
+  async delete(path: string): Promise<void> {
+    throw new Error('Not implemented');
+  }
 }
 
 // Placeholder for SharePoint
@@ -60,6 +71,9 @@ export class SharePointService implements StorageService {
     return `sharepoint://${destinationPath}`;
   }
   async download(path: string): Promise<Buffer> {
+    throw new Error('Not implemented');
+  }
+  async delete(path: string): Promise<void> {
     throw new Error('Not implemented');
   }
 }

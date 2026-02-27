@@ -5,11 +5,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { Route, Switch, useLocation } from 'wouter';
+import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
 import Requests from './pages/Requests';
 import Audit from './pages/Audit';
+import Profile from './pages/Profile';
+import Tenants from './pages/Tenants';
 import Layout from './components/Layout';
 
 export default function App() {
@@ -18,7 +21,6 @@ export default function App() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    // Check for existing session (mock)
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
@@ -26,21 +28,10 @@ export default function App() {
     setLoading(false);
   }, []);
 
-  const handleLogin = async () => {
-    try {
-      const res = await fetch('/api/auth/login', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        setLocation('/');
-      } else {
-        alert('Login failed');
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Login error');
-    }
+  const handleLoginSuccess = (userData: any) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+    setLocation('/');
   };
 
   const handleLogout = () => {
@@ -52,16 +43,23 @@ export default function App() {
   if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
 
   if (!user) {
-    return <Login onLogin={handleLogin} />;
+    return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
     <Layout user={user} onLogout={handleLogout}>
+      <Toaster position="top-right" />
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/">
+          <Dashboard user={user} />
+        </Route>
         <Route path="/clients" component={Clients} />
         <Route path="/requests" component={Requests} />
         <Route path="/audit" component={Audit} />
+        <Route path="/profile">
+          <Profile user={user} />
+        </Route>
+        <Route path="/tenants" component={Tenants} />
         <Route>404: Page Not Found</Route>
       </Switch>
     </Layout>
