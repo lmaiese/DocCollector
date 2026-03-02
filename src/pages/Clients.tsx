@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../config';
 
 interface Client {
   id: string;
@@ -19,7 +20,7 @@ export default function Clients() {
   }, []);
 
   const fetchClients = () => {
-    fetch('/api/clients')
+    fetch(`${API_BASE_URL}/api/clients`)
       .then(res => res.json())
       .then(data => setClients(data))
       .catch(err => console.error(err));
@@ -28,7 +29,7 @@ export default function Clients() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/clients', {
+      const res = await fetch(`${API_BASE_URL}/api/clients`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),

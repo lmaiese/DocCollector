@@ -96,7 +96,7 @@ export function initDb() {
     // Create superadmin
     const superAdminId = uuidv4();
     db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
-      superAdminId, 'system', 'super@admin.com', 'Super Admin', 'superadmin'
+      superAdminId, null, 'super@admin.com', 'Super Admin', 'superadmin'
     );
 
     // Tenant 1: Demo Studio
@@ -175,7 +175,7 @@ export function initDb() {
     const superAdmin = db.prepare("SELECT * FROM users WHERE role = 'superadmin' LIMIT 1").get();
     if (!superAdmin) {
        db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
-        uuidv4(), 'system', 'super@admin.com', 'Super Admin', 'superadmin'
+        uuidv4(), null, 'super@admin.com', 'Super Admin', 'superadmin'
       );
       console.log('Added missing Super Admin.');
     }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { History } from 'lucide-react';
 import { format } from 'date-fns';
+import { API_BASE_URL } from '../config';
 
 interface AuditLog {
   id: string;
@@ -14,7 +15,7 @@ export default function Audit() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
 
   useEffect(() => {
-    fetch('/api/audit')
+    fetch(`${API_BASE_URL}/api/audit`)
       .then(res => res.json())
       .then(data => setLogs(data))
       .catch(err => console.error(err));

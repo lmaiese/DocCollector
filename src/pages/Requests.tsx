@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Upload, CheckCircle, Clock, Download, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../config';
 
 interface Request {
   id: string;
@@ -35,7 +36,7 @@ export default function Requests() {
   }, []);
 
   const fetchRequests = (currentUser: any) => {
-    fetch('/api/requests', {
+    fetch(`${API_BASE_URL}/api/requests`, {
       headers: { 'x-user-id': currentUser.id }
     })
       .then(res => res.json())
@@ -44,7 +45,7 @@ export default function Requests() {
   };
 
   const fetchClients = () => {
-    fetch('/api/clients')
+    fetch(`${API_BASE_URL}/api/clients`)
       .then(res => res.json())
       .then(data => setClients(data))
       .catch(err => console.error(err));
@@ -53,7 +54,7 @@ export default function Requests() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/requests', {
+      const res = await fetch(`${API_BASE_URL}/api/requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -81,7 +82,7 @@ export default function Requests() {
     const toastId = toast.loading('Uploading document...');
     
     try {
-      const res = await fetch('/api/upload', {
+      const res = await fetch(`${API_BASE_URL}/api/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -103,7 +104,7 @@ export default function Requests() {
   const handleDeleteRequest = async (id: string) => {
     if (!confirm('Are you sure you want to delete this request?')) return;
     try {
-      const res = await fetch(`/api/requests/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/requests/${id}`, {
         method: 'DELETE',
         headers: { 'x-user-id': user.id }
       });
@@ -123,7 +124,7 @@ export default function Requests() {
   const handleDeleteDocument = async (docId: string) => {
     if (!confirm('Are you sure you want to delete this document? The request will revert to pending.')) return;
     try {
-      const res = await fetch(`/api/documents/${docId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/documents/${docId}`, {
         method: 'DELETE',
         headers: { 'x-user-id': user.id }
       });
@@ -244,7 +245,7 @@ export default function Requests() {
                   {req.status === 'uploaded' && req.document_id ? (
                     <div className="flex items-center gap-3">
                       <a 
-                        href={`/api/documents/${req.document_id}/download`}
+                        href={`${API_BASE_URL}/api/documents/${req.document_id}/download`}
                         className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 text-sm font-medium"
                         download
                       >

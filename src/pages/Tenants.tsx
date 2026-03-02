@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Building, User } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_BASE_URL } from '../config';
 
 interface Tenant {
   id: string;
@@ -20,7 +21,7 @@ export default function Tenants() {
   }, []);
 
   const fetchTenants = (currentUser: any) => {
-    fetch('/api/tenants', {
+    fetch(`${API_BASE_URL}/api/tenants`, {
       headers: { 'x-user-id': currentUser.id }
     })
       .then(res => {
@@ -34,7 +35,7 @@ export default function Tenants() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/tenants', {
+      const res = await fetch(`${API_BASE_URL}/api/tenants`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

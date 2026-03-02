@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { FileText, CheckCircle, AlertCircle, Building, Users, Database } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { API_BASE_URL } from '../config';
 
 export default function Dashboard({ user }: { user: any }) {
   const [stats, setStats] = useState<any>({ pendingRequests: 0, uploadedDocs: 0, missingDocs: 0, chartData: [] });
 
   useEffect(() => {
     if (!user) return;
-    fetch('/api/dashboard', {
+    fetch(`${API_BASE_URL}/api/dashboard`, {
       headers: { 'x-user-id': user.id }
     })
       .then(res => res.json())
