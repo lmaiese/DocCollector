@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../config';
 
@@ -21,10 +21,14 @@ export default function Clients() {
 
   const fetchClients = () => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const token = localStorage.getItem('token');
     if (!user.id) return;
 
     fetch(`${API_BASE_URL}/api/clients`, {
-      headers: { 'x-user-id': user.id }
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'x-user-id': user.id 
+      }
     })
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch clients');
@@ -46,10 +50,14 @@ export default function Clients() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/clients`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(formData),
       });
       if (res.ok) {
@@ -63,6 +71,29 @@ export default function Clients() {
     } catch (err) {
       console.error(err);
       toast.error('Error adding client');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this client?')) return;
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/clients/${id}`, {
+        method: 'DELETE',
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        fetchClients();
+        toast.success('Client deleted successfully');
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Failed to delete client');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Error deleting client');
     }
   };
 
@@ -132,6 +163,7 @@ export default function Clients() {
               <th className="p-4 font-medium text-gray-500">Name</th>
               <th className="p-4 font-medium text-gray-500">Code</th>
               <th className="p-4 font-medium text-gray-500">Tax ID</th>
+              <th className="p-4 font-medium text-gray-500">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -140,11 +172,20 @@ export default function Clients() {
                 <td className="p-4 font-medium text-gray-900">{client.name}</td>
                 <td className="p-4 text-gray-600">{client.internal_code}</td>
                 <td className="p-4 text-gray-600 font-mono text-sm">{client.tax_id}</td>
+                <td className="p-4">
+                  <button 
+                    onClick={() => handleDelete(client.id)}
+                    className="text-red-500 hover:text-red-700 transition-colors"
+                    title="Delete Client"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </td>
               </tr>
             ))}
             {clients.length === 0 && (
               <tr>
-                <td colSpan={3} className="p-8 text-center text-gray-500">No clients found. Add one to get started.</td>
+                <td colSpan={4} className="p-8 text-center text-gray-500">No clients found. Add one to get started.</td>
               </tr>
             )}
           </tbody>

@@ -1,33 +1,51 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { LogIn, Users, ShieldAlert } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { API_BASE_URL } from '../config';
 
 interface LoginProps {
-  onLoginSuccess: (user: any) => void;
+  onLoginSuccess: (user: any, token: string) => void;
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
-  const handleLogin = (role: 'admin' | 'client' | 'superadmin') => {
-    const toastId = toast.loading('Signing in...');
+  const [email, setEmail] = useState('');
 
-    fetch(`${API_BASE_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role })
-    })
-    .then(res => {
-      if (res.ok) return res.json();
-      throw new Error('Login failed');
-    })
-    .then(data => {
-      toast.success('Signed in successfully', { id: toastId });
-      onLoginSuccess(data.user);
-    })
-    .catch(err => {
+  const handleLogin = async (role: 'admin' | 'employee' | 'superadmin' | 'mock') => {
+    const toastId = toast.loading('Signing in...');
+    
+    // For demo purposes, we simulate Google Auth by sending a "token"
+    // In a real app, this would be the ID Token from Google Sign-In
+    let token = '';
+    
+    if (role === 'mock') {
+        // Use the hardcoded admin email
+        token = 'mock-token'; 
+    } else if (role === 'superadmin') {
+        token = 'superadmin-token';
+    } else {
+        // Use the entered email or a default one for testing
+        token = email || `test-${role}@example.com`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success('Signed in successfully', { id: toastId });
+        onLoginSuccess(data.user, data.token);
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Login failed');
+      }
+    } catch (err: any) {
       console.error(err);
-      toast.error('Login failed', { id: toastId });
-    });
+      toast.error(err.message, { id: toastId });
+    }
   };
 
   return (
@@ -43,20 +61,31 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         <p className="text-gray-500 mb-8">Sign in to manage your documents securely.</p>
         
         <div className="space-y-4">
+            <div className="text-left">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email (Simulate Google Login)</label>
+                <input 
+                    type="email" 
+                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
+                    placeholder="Enter email to simulate login"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                />
+            </div>
+
           <button 
-            onClick={() => handleLogin('admin')}
+            onClick={() => handleLogin('mock')}
             className="w-full flex items-center justify-center gap-3 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5 bg-white rounded-full p-0.5" />
-            Sign in as Operator (Google)
+            Sign in as Demo Admin
           </button>
           
           <button 
-            onClick={() => handleLogin('client')}
+            onClick={() => handleLogin('employee')}
             className="w-full flex items-center justify-center gap-3 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
           >
             <Users className="w-5 h-5" />
-            Sign in as Client (Demo)
+            Sign in with Email (Simulated)
           </button>
 
           <button 
@@ -64,7 +93,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             className="w-full flex items-center justify-center gap-3 bg-gray-800 text-white py-3 px-4 rounded-lg hover:bg-gray-900 transition-colors font-medium"
           >
             <ShieldAlert className="w-5 h-5" />
-            Sign in as Super Admin
+            Sign in as Super Admin (Demo)
           </button>
         </div>
         

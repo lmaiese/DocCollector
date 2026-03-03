@@ -22,9 +22,13 @@ export default function Tenants() {
 
   const fetchTenants = (currentUser: any) => {
     if (!currentUser?.id) return;
+    const token = localStorage.getItem('token');
     
     fetch(`${API_BASE_URL}/api/tenants`, {
-      headers: { 'x-user-id': currentUser.id }
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'x-user-id': currentUser.id 
+      }
     })
       .then(res => {
         if (res.ok) return res.json();
@@ -43,11 +47,13 @@ export default function Tenants() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/tenants`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
           'x-user-id': user.id
         },
         body: JSON.stringify(formData),

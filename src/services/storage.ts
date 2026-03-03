@@ -18,7 +18,7 @@ export class LocalStorageService implements StorageService {
   }
 
   async upload(file: Express.Multer.File, destinationPath: string): Promise<string> {
-    // destinationPath format: /Client/Year/Type/filename.ext
+    // destinationPath format: /TenantID/Type/filename.ext
     const fullPath = path.join(this.basePath, destinationPath);
     const dir = path.dirname(fullPath);
 

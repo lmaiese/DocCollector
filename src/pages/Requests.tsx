@@ -36,8 +36,12 @@ export default function Requests() {
   }, []);
 
   const fetchRequests = (currentUser: any) => {
+    const token = localStorage.getItem('token');
     fetch(`${API_BASE_URL}/api/requests`, {
-      headers: { 'x-user-id': currentUser.id }
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'x-user-id': currentUser.id 
+      }
     })
       .then(res => res.json())
       .then(data => setRequests(data))
@@ -46,10 +50,14 @@ export default function Requests() {
 
   const fetchClients = () => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const token = localStorage.getItem('token');
     if (!user.id) return;
 
     fetch(`${API_BASE_URL}/api/clients`, {
-      headers: { 'x-user-id': user.id }
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'x-user-id': user.id 
+      }
     })
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch clients');
@@ -71,10 +79,14 @@ export default function Requests() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/requests`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(formData),
       });
       if (res.ok) {
@@ -95,6 +107,7 @@ export default function Requests() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('request_id', requestId);
+    const token = localStorage.getItem('token');
 
     setUploadingId(requestId);
     const toastId = toast.loading('Uploading document...');
@@ -102,6 +115,9 @@ export default function Requests() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/upload`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formData,
       });
       if (res.ok) {
@@ -121,10 +137,14 @@ export default function Requests() {
 
   const handleDeleteRequest = async (id: string) => {
     if (!confirm('Are you sure you want to delete this request?')) return;
+    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/requests/${id}`, {
         method: 'DELETE',
-        headers: { 'x-user-id': user.id }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-user-id': user.id 
+        }
       });
       if (res.ok) {
         fetchRequests(user);
@@ -141,10 +161,14 @@ export default function Requests() {
 
   const handleDeleteDocument = async (docId: string) => {
     if (!confirm('Are you sure you want to delete this document? The request will revert to pending.')) return;
+    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/documents/${docId}`, {
         method: 'DELETE',
-        headers: { 'x-user-id': user.id }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-user-id': user.id 
+        }
       });
       if (res.ok) {
         fetchRequests(user);

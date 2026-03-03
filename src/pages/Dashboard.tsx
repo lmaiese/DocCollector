@@ -8,10 +8,17 @@ export default function Dashboard({ user }: { user: any }) {
 
   useEffect(() => {
     if (!user) return;
+    const token = localStorage.getItem('token');
     fetch(`${API_BASE_URL}/api/dashboard`, {
-      headers: { 'x-user-id': user.id }
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'x-user-id': user.id // Keep for backward compat if needed, but Auth header is primary
+      }
     })
-      .then(res => res.json())
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch dashboard stats');
+      })
       .then(data => setStats(data))
       .catch(err => console.error(err));
   }, [user]);

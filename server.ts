@@ -33,354 +33,369 @@ async function startServer() {
       res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
-    // Auth (Mock for preview)
-    app.post('/api/auth/login', (req, res) => {
-      const { role } = req.body; // 'admin', 'client', 'superadmin'
+    // Auth: Google Login (Simulated for now, but structure is ready for token verification)
+    app.post('/api/auth/google', (req, res) => {
+      const { token } = req.body;
       
-      let user;
-      if (role === 'client') {
-        user = db.prepare("SELECT * FROM users WHERE role = 'client' LIMIT 1").get();
-      } else if (role === 'superadmin') {
-        user = db.prepare("SELECT * FROM users WHERE role = 'superadmin' LIMIT 1").get();
+      // In a real app, verify token with Google:
+      // const ticket = await client.verifyIdToken({ idToken: token, audience: CLIENT_ID });
+      // const payload = ticket.getPayload();
+      // const email = payload['email'];
+      
+      // For this demo, we simulate by accepting any email in the "token" field if it's just an email string,
+      // or we just look up the hardcoded admin email if the token is "mock-token".
+      
+      let email = '';
+      if (token === 'mock-token') {
+        email = 'maieseluigi@gmail.com';
+      } else if (token === 'superadmin-token') {
+        email = 'superadmin@doccollector.com';
       } else {
-        // Default to the first admin of the first tenant for 'admin' role
-        // In a real app, user would enter email/password
-        user = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
+        // Assume token IS the email for testing simplicity if not mock-token
+        email = token;
       }
+
+      const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
 
       if (user) {
-        res.json({ user, token: 'mock-token' });
-      } else {
-        res.status(401).json({ error: 'No user found for this role' });
-      }
-    });
-
-    // Dashboard Stats
-    app.get('/api/dashboard', (req, res) => {
-      const userId = req.headers['x-user-id'] as string;
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
-
-      if (!user) return res.status(401).json({ error: 'Unauthorized' });
-
-      // Superadmin sees global stats
-      if (user.role === 'superadmin') {
-        const totalTenants = db.prepare("SELECT count(*) as count FROM tenants").get() as { count: number };
-        const totalUsers = db.prepare("SELECT count(*) as count FROM users").get() as { count: number };
-        const totalDocs = db.prepare("SELECT count(*) as count FROM documents").get() as { count: number };
-        
+        // User exists, return token (mock JWT)
         return res.json({
-          pendingRequests: totalTenants.count, // Hack to reuse UI card
-          uploadedDocs: totalDocs.count,
-          missingDocs: totalUsers.count, // Hack to reuse UI card
-          isSuperAdmin: true
+          token: `jwt-for-${user.id}`,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            tenant_id: user.tenant_id
+          }
         });
+      } else {
+        // User not found
+        return res.status(404).json({ error: 'User not registered', code: 'USER_NOT_FOUND', email });
       }
-
-      // Tenant Scoped Stats
-      let pendingQuery = `SELECT count(*) as count FROM requests WHERE tenant_id = '${user.tenant_id}' AND status = 'pending'`;
-      let uploadedQuery = `SELECT count(*) as count FROM documents WHERE tenant_id = '${user.tenant_id}'`;
-      
-      if (user.role === 'client') {
-        pendingQuery += ` AND client_id = '${user.client_id}'`;
-        uploadedQuery = `
-          SELECT count(*) as count 
-          FROM documents d
-          JOIN requests r ON d.request_id = r.id
-          WHERE r.client_id = '${user.client_id}'
-        `;
-      }
-
-      const pendingRequests = db.prepare(pendingQuery).get() as { count: number };
-      const uploadedDocs = db.prepare(uploadedQuery).get() as { count: number };
-      
-      // Calculate missing docs (pending requests)
-      const missingDocs = pendingRequests.count;
-
-      // Get recent activity (last 7 days requests) for chart
-      const chartData = db.prepare(`
-          SELECT date(created_at) as date, count(*) as count 
-          FROM requests 
-          WHERE tenant_id = ? 
-          GROUP BY date(created_at) 
-          ORDER BY date(created_at) DESC 
-          LIMIT 7
-      `).all(user.tenant_id);
-
-      res.json({
-        pendingRequests: pendingRequests.count,
-        uploadedDocs: uploadedDocs.count,
-        missingDocs,
-        chartData
-      });
     });
 
-    // Tenants (Superadmin only)
-    app.get('/api/tenants', (req, res) => {
-      const userId = req.headers['x-user-id'] as string;
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    // Auth: Register Tenant (for new users)
+    app.post('/api/auth/register-tenant', (req, res) => {
+      const { email, tenantName, userName } = req.body;
       
-      if (!user || user.role !== 'superadmin') return res.status(403).json({ error: 'Forbidden' });
+      if (!email || !tenantName) {
+        return res.status(400).json({ error: 'Missing fields' });
+      }
 
-      const tenants = db.prepare('SELECT * FROM tenants ORDER BY name').all();
-      res.json(tenants);
-    });
+      // Check if user already exists
+      const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+      if (existing) {
+        return res.status(400).json({ error: 'User already exists' });
+      }
 
-    app.post('/api/tenants', (req, res) => {
-      const userId = req.headers['x-user-id'] as string;
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
-      
-      if (!user || user.role !== 'superadmin') return res.status(403).json({ error: 'Forbidden' });
+      const tenantId = uuidv4();
+      const userId = uuidv4();
 
-      const { name } = req.body;
-      if (!name) return res.status(400).json({ error: 'Name is required' });
-
-      const id = uuidv4();
       try {
-        db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').run(id, name);
-        
-        // Create a default admin for this tenant
-        const adminId = uuidv4();
-        const adminEmail = `admin@${name.toLowerCase().replace(/\s+/g, '')}.com`;
-        db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
-          adminId, id, adminEmail, 'Admin User', 'admin'
-        );
+        const insertTenant = db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)');
+        const insertUser = db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)');
 
-        res.json({ id, name, adminEmail });
+        db.transaction(() => {
+          insertTenant.run(tenantId, tenantName);
+          insertUser.run(userId, tenantId, email, userName || email.split('@')[0], 'admin');
+        })();
+
+        res.json({
+          token: `jwt-for-${userId}`,
+          user: {
+            id: userId,
+            email,
+            name: userName,
+            role: 'admin',
+            tenant_id: tenantId
+          }
+        });
       } catch (err: any) {
         res.status(500).json({ error: err.message });
       }
     });
 
-    // Clients
-    app.get('/api/clients', (req, res) => {
-      const userId = req.headers['x-user-id'] as string;
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
-      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    // Middleware to simulate JWT verification
+    const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) return res.status(401).json({ error: 'No token provided' });
+      
+      const token = authHeader.split(' ')[1]; // Bearer <token>
+      // Mock verification: extract user ID from "jwt-for-<id>"
+      if (!token.startsWith('jwt-for-')) {
+         return res.status(401).json({ error: 'Invalid token format' });
+      }
 
+      const userId = token.replace('jwt-for-', '');
+      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+
+      if (!user) return res.status(401).json({ error: 'Invalid token user' });
+
+      (req as any).user = user;
+      next();
+    };
+
+    // --- Protected Routes ---
+
+    /**
+     * GET /api/me
+     * Returns the current authenticated user and their tenant information.
+     */
+    app.get('/api/me', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(user.tenant_id);
+      res.json({ user, tenant });
+    });
+
+    /**
+     * GET /api/tenants
+     * Super Admin Only.
+     * Lists all registered tenants in the system.
+     */
+    app.get('/api/tenants', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      
+      // Strict check: Only superadmin can list tenants
+      if (user.role !== 'superadmin') {
+        return res.status(403).json({ error: 'Forbidden: Super Admin access required' });
+      }
+
+      const tenants = db.prepare('SELECT * FROM tenants ORDER BY name').all();
+      res.json(tenants);
+    });
+
+    /**
+     * POST /api/tenants
+     * Super Admin Only.
+     * Creates a new Tenant and a default Admin user for that tenant.
+     */
+    app.post('/api/tenants', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      
+      // Strict check: Only superadmin can create tenants
+      if (user.role !== 'superadmin') {
+        return res.status(403).json({ error: 'Forbidden: Super Admin access required' });
+      }
+
+      const { name } = req.body;
+      if (!name) return res.status(400).json({ error: 'Tenant Name is required' });
+
+      const tenantId = uuidv4();
+      const adminId = uuidv4();
+      // Generate a default admin email for the new tenant
+      const adminEmail = `admin@${name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
+
+      try {
+        db.transaction(() => {
+          // Create Tenant
+          db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').run(tenantId, name);
+          
+          // Create Admin User for this Tenant
+          db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
+            adminId, tenantId, adminEmail, 'Tenant Admin', 'admin'
+          );
+        })();
+
+        res.json({ id: tenantId, name, adminEmail });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    /**
+     * GET /api/documents
+     * Lists documents for the current user's tenant.
+     * Super Admins are restricted from this endpoint as they do not manage documents.
+     */
+    app.get('/api/documents', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      
+      // Super Admin does NOT manage documents
       if (user.role === 'superadmin') {
-         // Superadmin sees all clients with tenant info
-         const clients = db.prepare(`
-           SELECT c.*, t.name as tenant_name 
-           FROM clients c 
-           JOIN tenants t ON c.tenant_id = t.id 
-           ORDER BY t.name, c.name
-         `).all();
-         return res.json(clients);
+        return res.status(403).json({ error: 'Super Admin cannot manage documents' });
+      }
+
+      // Filter by tenant
+      let query = `
+        SELECT d.*, c.name as client_name, u.name as uploader_name
+        FROM documents d
+        LEFT JOIN clients c ON d.client_id = c.id
+        LEFT JOIN users u ON d.uploader_id = u.id
+        WHERE d.tenant_id = ?
+      `;
+      
+      const params = [user.tenant_id];
+      
+      // Optional filters
+      const { type, client_id } = req.query;
+      if (type) {
+        query += ' AND d.type = ?';
+        params.push(type as string);
+      }
+      if (client_id) {
+        query += ' AND d.client_id = ?';
+        params.push(client_id as string);
+      }
+
+      query += ' ORDER BY d.created_at DESC';
+
+      const docs = db.prepare(query).all(...params);
+      res.json(docs);
+    });
+
+    /**
+     * POST /api/documents
+     * Uploads a new document.
+     * Restricted to Admin and Employee roles.
+     */
+    app.post('/api/documents', requireAuth, upload.single('file'), async (req, res) => {
+      const user = (req as any).user;
+      
+      // Super Admin does NOT manage documents
+      if (user.role === 'superadmin') {
+        return res.status(403).json({ error: 'Super Admin cannot manage documents' });
+      }
+
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+      const { type, client_id } = req.body;
+      if (!type) return res.status(400).json({ error: 'Type is required' });
+
+      // Save file
+      const ext = path.extname(req.file.originalname);
+      const filename = `${Date.now()}_${req.file.originalname.replace(/\s+/g, '_')}`;
+      const destinationPath = path.join(user.tenant_id, type, filename); // Organize by tenant/type
+
+      try {
+        const savedPath = await storageService.upload(req.file, destinationPath);
+        const docId = uuidv4();
+
+        db.prepare(`
+          INSERT INTO documents (id, tenant_id, uploader_id, client_id, type, filename, path)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(docId, user.tenant_id, user.id, client_id || null, type, req.file.originalname, savedPath);
+
+        // Audit
+        db.prepare('INSERT INTO audit_logs (id, tenant_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)').run(
+          uuidv4(), user.tenant_id, user.id, 'UPLOAD_DOCUMENT', `Uploaded ${req.file.originalname} as ${type}`
+        );
+
+        res.json({ success: true, id: docId });
+      } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    /**
+     * GET /api/clients
+     * Lists clients for the current tenant.
+     * Super Admin returns empty list (or forbidden).
+     */
+    app.get('/api/clients', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      
+      // Super Admin sees all clients? Or should not see clients?
+      // Request says "Super admin does not manage documents". Clients are related to documents.
+      // However, "Manage Admins" is the main role.
+      // Let's assume Super Admin doesn't need to see clients unless managing a tenant context (which we don't have yet).
+      // For now, let's restrict or allow read-only? 
+      // "Il super admin non si occupa di gestire documenti dall'applicazione" -> Clients are metadata for documents.
+      // Let's restrict Client access for Super Admin to keep it clean, or just return empty.
+      if (user.role === 'superadmin') {
+         return res.json([]); // Or 403. Returning empty list is safer for UI.
       }
 
       const clients = db.prepare('SELECT * FROM clients WHERE tenant_id = ? ORDER BY name').all(user.tenant_id);
       res.json(clients);
     });
 
-    app.post('/api/clients', (req, res) => {
-      const userId = req.headers['x-user-id'] as string;
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
-      if (!user || user.role === 'client') return res.status(403).json({ error: 'Forbidden' });
+    app.post('/api/clients', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      if (user.role === 'superadmin') return res.status(403).json({ error: 'Super Admin cannot manage clients' });
 
-      const { name, internal_code, tax_id } = req.body;
+      const { name, code } = req.body;
+      if (!name) return res.status(400).json({ error: 'Name required' });
+
       const id = uuidv4();
-      
-      try {
-        db.prepare('INSERT INTO clients (id, tenant_id, name, internal_code, tax_id) VALUES (?, ?, ?, ?, ?)').run(
-          id, user.tenant_id, name, internal_code, tax_id
-        );
-        res.json({ id, name, internal_code, tax_id });
-      } catch (err: any) {
-        res.status(500).json({ error: err.message });
-      }
+      db.prepare('INSERT INTO clients (id, tenant_id, name, code) VALUES (?, ?, ?, ?)').run(
+        id, user.tenant_id, name, code
+      );
+      res.json({ id, name, code });
     });
 
-    // Requests
-    app.get('/api/requests', (req, res) => {
-      const userId = req.headers['x-user-id'] as string;
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
-      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    /**
+     * DELETE /api/clients/:id
+     * Deletes a client if they have no associated documents.
+     */
+    app.delete('/api/clients/:id', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      if (user.role === 'superadmin') return res.status(403).json({ error: 'Super Admin cannot manage clients' });
 
-      let query = `
-        SELECT r.*, c.name as client_name, d.id as document_id, d.filename as document_filename
-        FROM requests r 
-        JOIN clients c ON r.client_id = c.id 
-        LEFT JOIN documents d ON r.id = d.request_id
-      `;
-
-      if (user.role === 'superadmin') {
-         // See all requests
-      } else {
-         query += ` WHERE r.tenant_id = '${user.tenant_id}'`;
-         if (user.role === 'client') {
-           query += ` AND r.client_id = '${user.client_id}'`;
-         }
-      }
-
-      query += ` ORDER BY r.created_at DESC`;
-
-      const requests = db.prepare(query).all();
-      res.json(requests);
-    });
-
-    app.post('/api/requests', (req, res) => {
-      const userId = req.headers['x-user-id'] as string;
-      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
-      if (!user || user.role === 'client') return res.status(403).json({ error: 'Forbidden' });
-
-      const { client_id, period, type } = req.body;
-      const id = uuidv4();
-      
-      try {
-        db.prepare('INSERT INTO requests (id, tenant_id, client_id, period, type) VALUES (?, ?, ?, ?, ?)').run(
-          id, user.tenant_id, client_id, period, type
-        );
-        
-        // Log audit
-        db.prepare('INSERT INTO audit_logs (id, tenant_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)').run(
-          uuidv4(), user.tenant_id, user.id, 'CREATE_REQUEST', `Request for ${client_id} ${period} ${type}`
-        );
-
-        res.json({ id, status: 'pending' });
-      } catch (err: any) {
-        res.status(500).json({ error: err.message });
-      }
-    });
-
-    // Upload
-    app.post('/api/upload', upload.single('file'), async (req, res) => {
-      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-      
-      const { request_id } = req.body;
-      if (!request_id) return res.status(400).json({ error: 'Missing request_id' });
-
-      const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(request_id) as any;
-      if (!request) return res.status(404).json({ error: 'Request not found' });
-
-      const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(request.client_id) as any;
-      
-      // Naming convention: CLIENT_YYYYMM_TIPO.ext
-      const ext = path.extname(req.file.originalname);
-      const newFilename = `${client.name.replace(/\s+/g, '_')}_${request.period}_${request.type}${ext}`;
-      
-      // Folder structure: /Client/Year/Type/file
-      const year = request.period.substring(0, 4);
-      const destinationPath = path.join(client.name, year, request.type, newFilename);
-
-      try {
-        const savedPath = await storageService.upload(req.file, destinationPath);
-        
-        const docId = uuidv4();
-        const tenant = db.prepare('SELECT id FROM tenants LIMIT 1').get() as { id: string };
-        const user = db.prepare('SELECT id FROM users LIMIT 1').get() as { id: string };
-
-        // Save doc record
-        db.prepare('INSERT INTO documents (id, tenant_id, request_id, filename, original_filename, path, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-          docId, tenant.id, request_id, newFilename, req.file.originalname, savedPath, user.id
-        );
-
-        // Update request status
-        db.prepare("UPDATE requests SET status = 'uploaded' WHERE id = ?").run(request_id);
-
-        // Audit
-        db.prepare('INSERT INTO audit_logs (id, tenant_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)').run(
-          uuidv4(), tenant.id, user.id, 'UPLOAD_DOCUMENT', `Uploaded ${newFilename}`
-        );
-
-        res.json({ success: true, filename: newFilename });
-      } catch (err: any) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
-      }
-    });
-
-    // Download
-    app.get('/api/documents/:id/download', async (req, res) => {
       const { id } = req.params;
-      const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id) as any;
-      
-      if (!doc) return res.status(404).json({ error: 'Document not found' });
 
-      try {
-        const fileBuffer = await storageService.download(doc.path);
-        
-        res.setHeader('Content-Disposition', `attachment; filename="${doc.filename}"`);
-        res.setHeader('Content-Type', 'application/octet-stream');
-        res.send(fileBuffer);
-        
-        // Audit download
-        // Note: In a real app we'd get user from auth middleware/header
-        // For simplicity we skip audit here or need to pass user id in query param
-      } catch (err: any) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
-      }
-    });
+      // Check if client belongs to tenant
+      const client = db.prepare('SELECT * FROM clients WHERE id = ? AND tenant_id = ?').get(id, user.tenant_id);
+      if (!client) return res.status(404).json({ error: 'Client not found' });
 
-    // Delete Request
-    app.delete('/api/requests/:id', (req, res) => {
-      const { id } = req.params;
-      const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(id) as any;
-      
-      if (!request) return res.status(404).json({ error: 'Request not found' });
-      if (request.status === 'uploaded') {
-        return res.status(400).json({ error: 'Cannot delete request with uploaded document. Delete document first.' });
+      // Check for existing documents
+      const docCount = db.prepare('SELECT count(*) as count FROM documents WHERE client_id = ?').get(id) as { count: number };
+      if (docCount.count > 0) {
+        return res.status(400).json({ error: 'Cannot delete client with existing documents. Delete documents first.' });
       }
 
       try {
-        db.prepare('DELETE FROM requests WHERE id = ?').run(id);
-        
-        // Audit
-        const userId = req.headers['x-user-id'] as string; // Assuming passed
-        if (userId) {
-          const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
-          if (user) {
-            db.prepare('INSERT INTO audit_logs (id, tenant_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)').run(
-              uuidv4(), user.tenant_id, user.id, 'DELETE_REQUEST', `Deleted request ${id}`
-            );
-          }
-        }
-        
+        db.prepare('DELETE FROM clients WHERE id = ?').run(id);
         res.json({ success: true });
       } catch (err: any) {
         res.status(500).json({ error: err.message });
       }
     });
 
-    // Delete Document
-    app.delete('/api/documents/:id', async (req, res) => {
-      const { id } = req.params;
-      const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id) as any;
-      
-      if (!doc) return res.status(404).json({ error: 'Document not found' });
+    /**
+     * GET /api/users
+     * Admin Only.
+     * Lists users within the tenant.
+     */
+    app.get('/api/users', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      if (user.role !== 'admin') return res.status(403).json({ error: 'Admins only' });
 
+      const users = db.prepare('SELECT id, email, name, role, created_at FROM users WHERE tenant_id = ?').all(user.tenant_id);
+      res.json(users);
+    });
+
+    app.post('/api/users', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      if (user.role !== 'admin') return res.status(403).json({ error: 'Admins only' });
+
+      const { email, name, role } = req.body;
+      if (!email) return res.status(400).json({ error: 'Email required' });
+
+      const id = uuidv4();
       try {
-        await storageService.delete(doc.path);
-        
-        db.prepare('DELETE FROM documents WHERE id = ?').run(id);
-        db.prepare("UPDATE requests SET status = 'pending' WHERE id = ?").run(doc.request_id);
-
-        // Audit
-        const userId = req.headers['x-user-id'] as string;
-        if (userId) {
-          const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
-          if (user) {
-            db.prepare('INSERT INTO audit_logs (id, tenant_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)').run(
-              uuidv4(), user.tenant_id, user.id, 'DELETE_DOCUMENT', `Deleted document ${doc.filename}`
-            );
-          }
-        }
-
-        res.json({ success: true });
+        db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(
+          id, user.tenant_id, email, name, role || 'employee'
+        );
+        res.json({ id, email, name, role });
       } catch (err: any) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
+        res.status(400).json({ error: 'User likely exists or invalid data' });
       }
     });
 
-    // Audit Logs
-    app.get('/api/audit', (req, res) => {
+    // Audit Logs (Admin only)
+    app.get('/api/audit', requireAuth, (req, res) => {
+      const user = (req as any).user;
+      if (user.role !== 'admin') return res.status(403).json({ error: 'Admins only' });
+
       const logs = db.prepare(`
         SELECT a.*, u.name as user_name 
         FROM audit_logs a 
         LEFT JOIN users u ON a.user_id = u.id 
-        ORDER BY a.timestamp DESC LIMIT 50
-      `).all();
+        WHERE a.tenant_id = ?
+        ORDER BY a.timestamp DESC LIMIT 100
+      `).all(user.tenant_id);
       res.json(logs);
     });
 

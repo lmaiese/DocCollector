@@ -22,21 +22,24 @@ export default function App() {
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
-    if (storedUser) {
+    const storedToken = localStorage.getItem('token');
+    if (storedUser && storedToken) {
       setUser(JSON.parse(storedUser));
     }
     setLoading(false);
   }, []);
 
-  const handleLoginSuccess = (userData: any) => {
+  const handleLoginSuccess = (userData: any, token: string) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('token', token);
     setLocation('/');
   };
 
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
     setLocation('/');
   };
 

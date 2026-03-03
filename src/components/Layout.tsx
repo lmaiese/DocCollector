@@ -15,12 +15,14 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
     ...(user.role === 'superadmin' ? [
       { href: '/tenants', label: 'Tenants', icon: Building },
-    ] : []),
+    ] : [
+      // Only non-superadmin users see these
+      { href: '/requests', label: 'Requests', icon: FileText },
+    ]),
     ...(user.role === 'admin' ? [
       { href: '/clients', label: 'Clients', icon: Users },
       { href: '/audit', label: 'Audit Log', icon: History },
     ] : []),
-    { href: '/requests', label: 'Requests', icon: FileText },
   ];
 
   return (
