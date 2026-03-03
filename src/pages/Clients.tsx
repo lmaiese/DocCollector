@@ -1,155 +1,97 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { API_BASE_URL } from '../config';
+import { api } from '../api/client';
+import { Client } from '../types';
 
-interface Client {
-  id: string;
-  name: string;
-  internal_code: string;
-  tax_id: string;
-}
+const EMPTY_FORM = { name: '', internal_code: '', tax_id: '', email: '', phone: '', notes: '' };
 
 export default function Clients() {
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients]   = useState<Client[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ name: '', internal_code: '', tax_id: '' });
-
-  useEffect(() => {
-    fetchClients();
-  }, []);
+  const [editId, setEditId]     = useState<string | null>(null);
+  const [formData, setFormData] = useState({ ...EMPTY_FORM });
+  const [search, setSearch]     = useState('');
 
   const fetchClients = () => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const token = localStorage.getItem('token');
-    if (!user.id) return;
-
-    fetch(`${API_BASE_URL}/api/clients`, {
-      headers: { 
-        'Authorization': `Bearer ${token}`,
-        'x-user-id': user.id 
-      }
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch clients');
-        return res.json();
-      })
-      .then(data => {
-        if (Array.isArray(data)) {
-          setClients(data);
-        } else {
-          console.error('Clients data is not an array:', data);
-          setClients([]);
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        toast.error('Failed to load clients');
-      });
+    const q = search ? `?search=${encodeURIComponent(search)}` : '';
+    api.get<Client[]>(`/api/clients${q}`).then(setClients).catch(console.error);
   };
+
+  useEffect(() => { fetchClients(); }, [search]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem('token');
+    const toastId = toast.loading(editId ? 'Aggiornamento...' : 'Salvataggio...');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/clients`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData),
-      });
-      if (res.ok) {
-        setShowForm(false);
-        setFormData({ name: '', internal_code: '', tax_id: '' });
-        fetchClients();
-        toast.success('Client added successfully');
+      if (editId) {
+        await api.put(`/api/clients/${editId}`, formData);
+        toast.success('Cliente aggiornato', { id: toastId });
       } else {
-        toast.error('Failed to add client');
+        await api.post('/api/clients', formData);
+        toast.success('Cliente aggiunto', { id: toastId });
       }
-    } catch (err) {
-      console.error(err);
-      toast.error('Error adding client');
-    }
+      setShowForm(false); setEditId(null); setFormData({ ...EMPTY_FORM }); fetchClients();
+    } catch (err: any) { toast.error(err.message, { id: toastId }); }
+  };
+
+  const handleEdit = (c: Client) => {
+    setEditId(c.id);
+    setFormData({
+      name: c.name, internal_code: c.internal_code || '',
+      tax_id: c.tax_id || '', email: c.email || '',
+      phone: c.phone || '', notes: c.notes || '',
+    });
+    setShowForm(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this client?')) return;
-    const token = localStorage.getItem('token');
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/clients/${id}`, {
-        method: 'DELETE',
-        headers: { 
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        fetchClients();
-        toast.success('Client deleted successfully');
-      } else {
-        const data = await res.json();
-        toast.error(data.error || 'Failed to delete client');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Error deleting client');
-    }
+    if (!confirm('Eliminare questo cliente?')) return;
+    try { await api.delete(`/api/clients/${id}`); toast.success('Cliente eliminato'); fetchClients(); }
+    catch (err: any) { toast.error(err.message); }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">Clients</h2>
-        <button 
-          onClick={() => setShowForm(true)}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors"
+        <h2 className="text-2xl font-bold text-gray-800">Clienti</h2>
+        <button
+          onClick={() => { setShowForm(true); setEditId(null); setFormData({ ...EMPTY_FORM }); }}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-colors text-sm font-medium"
         >
-          <Plus className="w-4 h-4" />
-          Add Client
+          <Plus className="w-4 h-4" /> Aggiungi Cliente
         </button>
       </div>
 
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input type="text" placeholder="Cerca nome, codice, P.IVA..."
+          className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm"
+          value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
       {showForm && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
-          <h3 className="text-lg font-semibold mb-4">New Client</h3>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <h3 className="text-lg font-semibold mb-4">{editId ? 'Modifica Cliente' : 'Nuovo Cliente'}</h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <input
-              type="text"
-              placeholder="Client Name"
-              className="border p-2 rounded-lg"
-              value={formData.name}
-              onChange={e => setFormData({...formData, name: e.target.value})}
-              required
-            />
-            <input
-              type="text"
-              placeholder="Internal Code"
-              className="border p-2 rounded-lg"
-              value={formData.internal_code}
-              onChange={e => setFormData({...formData, internal_code: e.target.value})}
-            />
-            <input
-              type="text"
-              placeholder="Tax ID (CF/P.IVA)"
-              className="border p-2 rounded-lg"
-              value={formData.tax_id}
-              onChange={e => setFormData({...formData, tax_id: e.target.value})}
-              required
-            />
+            <input required placeholder="Ragione Sociale *" className="border p-2 rounded-lg"
+              value={formData.name} onChange={e => setFormData(f => ({ ...f, name: e.target.value }))} />
+            <input placeholder="Codice Interno" className="border p-2 rounded-lg"
+              value={formData.internal_code} onChange={e => setFormData(f => ({ ...f, internal_code: e.target.value }))} />
+            <input placeholder="CF / Partita IVA" className="border p-2 rounded-lg font-mono"
+              value={formData.tax_id} onChange={e => setFormData(f => ({ ...f, tax_id: e.target.value }))} />
+            <input type="email" placeholder="Email" className="border p-2 rounded-lg"
+              value={formData.email} onChange={e => setFormData(f => ({ ...f, email: e.target.value }))} />
+            <input placeholder="Telefono" className="border p-2 rounded-lg"
+              value={formData.phone} onChange={e => setFormData(f => ({ ...f, phone: e.target.value }))} />
+            <input placeholder="Note" className="border p-2 rounded-lg"
+              value={formData.notes} onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))} />
             <div className="md:col-span-3 flex justify-end gap-2">
-              <button 
-                type="button" 
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit"
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-              >
-                Save Client
+              <button type="button" onClick={() => { setShowForm(false); setEditId(null); }}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Annulla</button>
+              <button type="submit"
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                {editId ? 'Salva Modifiche' : 'Aggiungi'}
               </button>
             </div>
           </form>
@@ -157,35 +99,42 @@ export default function Clients() {
       )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-left">
+        <table className="w-full text-left text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="p-4 font-medium text-gray-500">Name</th>
-              <th className="p-4 font-medium text-gray-500">Code</th>
-              <th className="p-4 font-medium text-gray-500">Tax ID</th>
-              <th className="p-4 font-medium text-gray-500">Actions</th>
+              <th className="p-4 font-medium text-gray-500">Ragione Sociale</th>
+              <th className="p-4 font-medium text-gray-500">Codice</th>
+              <th className="p-4 font-medium text-gray-500">CF / P.IVA</th>
+              <th className="p-4 font-medium text-gray-500">Email</th>
+              <th className="p-4 font-medium text-gray-500">Azioni</th>
             </tr>
           </thead>
           <tbody>
-            {clients.map(client => (
-              <tr key={client.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="p-4 font-medium text-gray-900">{client.name}</td>
-                <td className="p-4 text-gray-600">{client.internal_code}</td>
-                <td className="p-4 text-gray-600 font-mono text-sm">{client.tax_id}</td>
+            {clients.map(c => (
+              <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="p-4 font-medium text-gray-900">{c.name}</td>
+                <td className="p-4 text-gray-600 font-mono text-xs">{c.internal_code || '—'}</td>
+                <td className="p-4 text-gray-600 font-mono text-xs">{c.tax_id || '—'}</td>
+                <td className="p-4 text-gray-600">{c.email || '—'}</td>
                 <td className="p-4">
-                  <button 
-                    onClick={() => handleDelete(client.id)}
-                    className="text-red-500 hover:text-red-700 transition-colors"
-                    title="Delete Client"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleEdit(c)}
+                      className="text-gray-400 hover:text-indigo-600 transition-colors" title="Modifica">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleDelete(c.id)}
+                      className="text-gray-400 hover:text-red-600 transition-colors" title="Elimina">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
             {clients.length === 0 && (
               <tr>
-                <td colSpan={4} className="p-8 text-center text-gray-500">No clients found. Add one to get started.</td>
+                <td colSpan={5} className="p-10 text-center text-gray-400">
+                  {search ? 'Nessun cliente corrisponde alla ricerca.' : 'Nessun cliente. Aggiungine uno per iniziare.'}
+                </td>
               </tr>
             )}
           </tbody>
@@ -194,3 +143,5 @@ export default function Clients() {
     </div>
   );
 }
+
+
