@@ -179,6 +179,18 @@ export function initDb() {
       );
       console.log('Added missing Super Admin.');
     }
+
+    // Ensure at least one client user exists
+    const clientUser = db.prepare("SELECT * FROM users WHERE role = 'client' LIMIT 1").get();
+    if (!clientUser) {
+      const client = db.prepare('SELECT * FROM clients LIMIT 1').get() as { id: string, tenant_id: string, name: string };
+      if (client) {
+        db.prepare('INSERT INTO users (id, tenant_id, email, name, role, client_id) VALUES (?, ?, ?, ?, ?, ?)').run(
+          uuidv4(), client.tenant_id, `contact@client.com`, `${client.name} Contact`, 'client', client.id
+        );
+        console.log('Added missing Client User.');
+      }
+    }
   }
 }
 

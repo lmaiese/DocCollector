@@ -21,6 +21,8 @@ export default function Tenants() {
   }, []);
 
   const fetchTenants = (currentUser: any) => {
+    if (!currentUser?.id) return;
+    
     fetch(`${API_BASE_URL}/api/tenants`, {
       headers: { 'x-user-id': currentUser.id }
     })
@@ -28,7 +30,14 @@ export default function Tenants() {
         if (res.ok) return res.json();
         throw new Error('Failed to fetch tenants');
       })
-      .then(data => setTenants(data))
+      .then(data => {
+        if (Array.isArray(data)) {
+          setTenants(data);
+        } else {
+          console.error('Tenants data is not an array:', data);
+          setTenants([]);
+        }
+      })
       .catch(err => console.error(err));
   };
 

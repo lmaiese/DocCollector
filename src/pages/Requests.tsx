@@ -45,10 +45,28 @@ export default function Requests() {
   };
 
   const fetchClients = () => {
-    fetch(`${API_BASE_URL}/api/clients`)
-      .then(res => res.json())
-      .then(data => setClients(data))
-      .catch(err => console.error(err));
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!user.id) return;
+
+    fetch(`${API_BASE_URL}/api/clients`, {
+      headers: { 'x-user-id': user.id }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch clients');
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setClients(data);
+        } else {
+          console.error('Clients data is not an array:', data);
+          setClients([]);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        toast.error('Failed to load clients');
+      });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

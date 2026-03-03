@@ -5,15 +5,22 @@ import multer from 'multer';
 import { LocalStorageService } from './src/services/storage.js';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import fs from 'fs';
 
 // Initialize DB
-initDb();
+try {
+  initDb();
+} catch (err: any) {
+  fs.writeFileSync('db-init-error.log', err.toString());
+  process.exit(1);
+}
 
 const storageService = new LocalStorageService();
 const upload = multer({ storage: multer.memoryStorage() });
 
 async function startServer() {
   try {
+    fs.writeFileSync('server-debug.log', `Starting server... NODE_ENV=${process.env.NODE_ENV}\n`);
     const app = express();
     const PORT = 3000;
 
@@ -394,8 +401,9 @@ async function startServer() {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to start server:', error);
+    fs.writeFileSync('server-startup-error.log', error.toString());
     process.exit(1);
   }
 }
