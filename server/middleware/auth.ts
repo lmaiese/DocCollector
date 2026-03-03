@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import db from '../../src/db/index.js';
+import db from '../../src/db/index.ts';
 
 export interface AuthRequest extends Request { user?: any; }
 

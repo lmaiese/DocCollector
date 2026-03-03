@@ -1,5 +1,5 @@
 import { Client } from '@microsoft/microsoft-graph-client';
-import { StorageFile, StorageService } from './storage.interface.js';
+import { StorageFile, StorageService } from './storage.interface.ts';
 
 export class SharePointStorageService implements StorageService {
   private client: Client;

@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { Readable } from 'stream';
-import { StorageFile, StorageService } from './storage.interface.js';
+import { StorageFile, StorageService } from './storage.interface.ts';
 
 export class GoogleDriveStorageService implements StorageService {
   private drive: any;

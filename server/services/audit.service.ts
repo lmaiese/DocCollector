@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import db from '../../src/db/index.js';
+import db from '../../src/db/index.ts';
 
 export function logAudit(tenantId: string, userId: string | null, action: string, details?: string): void {
   try {

@@ -1,8 +1,8 @@
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { AuthRequest } from '../middleware/auth.js';
-import db from '../../src/db/index.js';
-import { logAudit } from '../services/audit.service.js';
+import { AuthRequest } from '../middleware/auth.ts';
+import db from '../../src/db/index.ts';
+import { logAudit } from '../services/audit.service.ts';
 
 export const getTenants   = (req: AuthRequest, res: Response): void => { res.json(db.prepare('SELECT * FROM tenants ORDER BY name').all()); };
 export const createTenant = (req: AuthRequest, res: Response): void => {

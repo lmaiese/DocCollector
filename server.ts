@@ -3,16 +3,16 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import path from 'path';
-import { initDb } from './src/db/index.js';
-import { errorHandler, notFound } from './server/middleware/errorHandler.js';
-import authRoutes      from './server/routes/auth.routes.js';
-import dashboardRoutes from './server/routes/dashboard.routes.js';
-import clientRoutes    from './server/routes/clients.routes.js';
-import requestRoutes   from './server/routes/requests.routes.js';
-import documentRoutes  from './server/routes/documents.routes.js';
-import userRoutes      from './server/routes/users.routes.js';
-import tenantRoutes    from './server/routes/tenants.routes.js';
-import auditRoutes     from './server/routes/audit.routes.js';
+import { initDb } from './src/db/index.ts';
+import { errorHandler, notFound } from './server/middleware/errorHandler.ts';
+import authRoutes      from './server/routes/auth.routes.ts';
+import dashboardRoutes from './server/routes/dashboard.routes.ts';
+import clientRoutes    from './server/routes/clients.routes.ts';
+import requestRoutes   from './server/routes/requests.routes.ts';
+import documentRoutes  from './server/routes/documents.routes.ts';
+import userRoutes      from './server/routes/users.routes.ts';
+import tenantRoutes    from './server/routes/tenants.routes.ts';
+import auditRoutes     from './server/routes/audit.routes.ts';
 
 try { initDb(); } catch (err: any) { fs.writeFileSync('db-init-error.log', String(err)); process.exit(1); }
 

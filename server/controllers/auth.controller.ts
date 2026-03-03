@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import db from '../../src/db/index.js';
-import { logAudit } from '../services/audit.service.js';
+import db from '../../src/db/index.ts';
+import { logAudit } from '../services/audit.service.ts';
 
 export const googleLogin = (req: Request, res: Response): void => {
   const { token } = req.body;

@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../middleware/auth.js';
-import { getClients, createClient, updateClient, deleteClient } from '../controllers/clients.controller.js';
+import { requireAuth, requireRole } from '../middleware/auth.ts';
+import { getClients, createClient, updateClient, deleteClient } from '../controllers/clients.controller.ts';
 const router = Router();
 router.get('/',     requireAuth, getClients);
 router.post('/',    requireAuth, requireRole('admin','employee'), createClient);

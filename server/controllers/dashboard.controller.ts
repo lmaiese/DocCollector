@@ -1,6 +1,6 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth.js';
-import db from '../../src/db/index.js';
+import { AuthRequest } from '../middleware/auth.ts';
+import db from '../../src/db/index.ts';
 import { subDays, format, addDays } from 'date-fns';
 
 export const getDashboard = (req: AuthRequest, res: Response): void => {

@@ -1,8 +1,8 @@
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { AuthRequest } from '../middleware/auth.js';
+import { AuthRequest } from '../middleware/auth.ts';
 import db from '../../src/db/index.js';
-import { logAudit } from '../services/audit.service.js';
+import { logAudit } from '../services/audit.service.ts';
 
 export const getClients = (req: AuthRequest, res: Response): void => {
   if (req.user.role === 'superadmin') { res.json([]); return; }

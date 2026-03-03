@@ -1,10 +1,10 @@
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
-import { AuthRequest } from '../middleware/auth.js';
-import db from '../../src/db/index.js';
-import { createStorageService } from '../services/storage/factory.js';
-import { logAudit } from '../services/audit.service.js';
+import { AuthRequest } from '../middleware/auth.ts';
+import db from '../../src/db/index.ts';
+import { createStorageService } from '../services/storage/factory.ts';
+import { logAudit } from '../services/audit.service.ts';
 
 function getStorage(tenantId: string) {
   const t = db.prepare('SELECT storage_provider, storage_config FROM tenants WHERE id=?').get(tenantId) as any;

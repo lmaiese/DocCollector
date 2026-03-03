@@ -1,6 +1,6 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth.js';
-import db from '../../src/db/index.js';
+import { AuthRequest } from '../middleware/auth.ts';
+import db from '../../src/db/index.ts';
 
 export const getAuditLogs = (req: AuthRequest, res: Response): void => {
   const { limit = '100', action, user_id } = req.query;

@@ -4,7 +4,7 @@ import {
   Download, Trash2, Search, Filter, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { api } from '../api/client';
+import { api } from '../api/clients';
 import { Request, Client } from '../types';
 import DeadlineBadge from '../components/DeadlineBadge';
 import { useAuth } from '../context/AuthContext';

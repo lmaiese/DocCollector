@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import { applySchema } from './schema.js';
-import { seedDb } from './seed.js';
+import { applySchema } from './schema.ts';
+import { seedDb } from './seed.ts';
 
 const dbPath = path.join(process.cwd(), 'doccollector.db');
 const db = new Database(dbPath);

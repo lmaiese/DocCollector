@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
-import { getRequests, createRequest, updateRequest, deleteRequest } from '../controllers/requests.controller.js';
+import { requireAuth } from '../middleware/auth.ts';
+import { getRequests, createRequest, updateRequest, deleteRequest } from '../controllers/requests.controller.ts';
 const router = Router();
 router.get('/',       requireAuth, getRequests);
 router.post('/',      requireAuth, createRequest);
