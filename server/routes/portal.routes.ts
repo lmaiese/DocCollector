@@ -19,6 +19,7 @@ router.use(requireAuth, requireRole('client'));
 router.get('/dashboard',          getPortalDashboard);
 router.get('/requests',           getPortalRequests);
 router.get('/documents',          getPortalDocuments);
+router.get('/documents/:id/download', downloadPortalDocument);
 router.get('/practices',          getPortalPractices);
 router.post('/requests/:id/upload', upload.single('file'), uploadPortalDocument);
 router.post('/requests/:id/comments', addPortalComment);
