@@ -4,7 +4,7 @@ import {
   Search, Filter, X, Eye, XCircle, AlertTriangle, MessageSquare,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { api } from '../api/clients';
+import { api } from '../api/index';
 import { Request, Client } from '../types';
 import DeadlineBadge from '../components/DeadlineBadge';
 import { useAuth } from '../context/AuthContext';
