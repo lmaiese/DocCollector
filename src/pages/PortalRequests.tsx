@@ -4,7 +4,7 @@ import {
   XCircle, Eye, MessageSquare, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { api } from '../../api/clients';
+import { api } from '../api/index';
 import DeadlineBadge from '../../components/DeadlineBadge';
 import { API_BASE_URL } from '../../config';
 
