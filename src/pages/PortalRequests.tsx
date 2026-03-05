@@ -23,12 +23,12 @@ export default function PortalRequests() {
   const [comment, setComment]       = useState('');
   const [filterStatus, setFilter]   = useState('');
 
-  const fetch = () => {
+  const fetchRequests = () => {
     const q = filterStatus ? `?status=${filterStatus}` : '';
     api.get<any[]>(`/api/portal/requests${q}`).then(setRequests).catch(console.error);
   };
 
-  useEffect(() => { fetch(); }, [filterStatus]);
+  useEffect(() => { fetchRequests(); }, [filterStatus]);
 
   const handleUpload = async (requestId: string, file: File) => {
     const fd = new FormData();
@@ -38,7 +38,7 @@ export default function PortalRequests() {
     try {
       await api.upload(`/api/portal/requests/${requestId}/upload`, fd);
       toast.success('Documento caricato con successo!', { id: tid });
-      fetch();
+      fetchRequests();
     } catch (err: any) {
       toast.error(err.message, { id: tid });
     } finally { setUploading(null); }
