@@ -5,8 +5,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../api/index';
-import DeadlineBadge from '../../components/DeadlineBadge';
-import { API_BASE_URL } from '../../config';
+import DeadlineBadge from '../components/DeadlineBadge';
+import { API_BASE_URL } from '../config';
 
 const STATUS_CONFIG = {
   pending:      { label: 'Da caricare',   icon: Clock,         color: 'text-yellow-600 bg-yellow-50' },
