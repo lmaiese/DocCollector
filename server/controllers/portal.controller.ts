@@ -250,3 +250,23 @@ export const getPortalDocuments = async (req: AuthRequest, res: Response): Promi
 
   res.json(shared);
 };
+
+export const downloadPortalDocument = async (req: AuthRequest, res: Response) => {
+  const doc = await db.query.documents.findFirst({
+    where: and(
+      eq(documents.id, req.params.id),
+      eq(documents.tenantId, req.user.tenantId),
+    ),
+  });
+  // verifica che appartena al client
+  if (!doc) { res.status(404).json({ error: 'Not found' }); return; }
+  const request = await db.query.requests.findFirst({
+    where: and(eq(requests.id, doc.requestId!), eq(requests.clientId, req.user.clientId!)),
+  });
+  if (!request) { res.status(403).json({ error: 'Forbidden' }); return; }
+  const storage = await getStorage(req.user.tenantId);
+  const buffer  = await storage.download(doc.storagePath);
+  res.setHeader('Content-Disposition', `attachment; filename="${doc.originalFilename}"`);
+  res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
+  res.send(buffer);
+};
