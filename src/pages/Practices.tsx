@@ -3,7 +3,7 @@ import { Plus, FolderOpen, ChevronRight, User,
          Calendar, CheckCircle, Clock, AlertTriangle, Filter } from 'lucide-react';
 import { Link } from 'wouter';
 import toast from 'react-hot-toast';
-import { api } from '../api/clients';
+import { api } from '../api/index';
 import { useAuth } from '../context/AuthContext';
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
