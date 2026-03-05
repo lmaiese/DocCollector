@@ -1,35 +1,90 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth.ts';
-import db from '../../src/db/index.ts';
+import { eq, and, gte, lt, lte, count } from 'drizzle-orm';
 import { subDays, format, addDays } from 'date-fns';
+import { AuthRequest } from '../middleware/auth.ts';
+import db from '../../src/db/index.pg.ts';
+import { requests, documents, tenants, users } from '../../src/db/schema.pg.ts';
 
-export const getDashboard = (req: AuthRequest, res: Response): void => {
+export const getDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
   const user = req.user;
+
+  // ── Superadmin: statistiche globali ──────────────────────────────────────
   if (user.role === 'superadmin') {
+    const [tenantCount]   = await db.select({ c: count() }).from(tenants);
+    const [userCount]     = await db.select({ c: count() }).from(users);
+    const [documentCount] = await db.select({ c: count() }).from(documents);
+
     res.json({
-      isSuperAdmin: true,
-      pendingRequests: (db.prepare('SELECT count(*) as c FROM tenants').get() as any).c,
-      missingDocs:     (db.prepare("SELECT count(*) as c FROM users WHERE role != 'superadmin'").get() as any).c,
-      uploadedDocs:    (db.prepare('SELECT count(*) as c FROM documents').get() as any).c,
-      chartData: [], expiringThisWeek: 0, overdueRequests: 0,
+      isSuperAdmin:    true,
+      pendingRequests: tenantCount.c,
+      missingDocs:     userCount.c,
+      uploadedDocs:    documentCount.c,
+      chartData:       [],
+      expiringThisWeek: 0,
+      overdueRequests:  0,
     });
     return;
   }
-  const tid = user.tenant_id;
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
-  const in7days  = addDays(today, 7).toISOString().split('T')[0];
 
-  const pendingRequests  = (db.prepare("SELECT count(*) as c FROM requests WHERE tenant_id = ? AND status = 'pending'").get(tid) as any).c;
-  const uploadedDocs     = (db.prepare('SELECT count(*) as c FROM documents WHERE tenant_id = ?').get(tid) as any).c;
-  const expiringThisWeek = (db.prepare("SELECT count(*) as c FROM requests WHERE tenant_id=? AND status='pending' AND deadline IS NOT NULL AND deadline>=? AND deadline<=?").get(tid, todayStr, in7days) as any).c;
-  const overdueRequests  = (db.prepare("SELECT count(*) as c FROM requests WHERE tenant_id=? AND status='pending' AND deadline IS NOT NULL AND deadline<?").get(tid, todayStr) as any).c;
+  // ── Staff: statistiche per tenant ─────────────────────────────────────────
+  const tid     = user.tenantId;
+  const today   = new Date();
+  today.setHours(0, 0, 0, 0);
+  const in7days = addDays(today, 7);
+  const todayStr  = format(today,   'yyyy-MM-dd');
+  const in7Str    = format(in7days, 'yyyy-MM-dd');
 
+  const [pendingResult] = await db
+    .select({ c: count() })
+    .from(requests)
+    .where(and(eq(requests.tenantId, tid), eq(requests.status, 'pending')));
+
+  const [uploadedResult] = await db
+    .select({ c: count() })
+    .from(documents)
+    .where(eq(documents.tenantId, tid));
+
+  // Richieste in scadenza nei prossimi 7 giorni (pending)
+  const allPending = await db.query.requests.findMany({
+    where: and(eq(requests.tenantId, tid), eq(requests.status, 'pending')),
+    columns: { deadline: true },
+  });
+
+  const expiringThisWeek = allPending.filter(r =>
+    r.deadline && r.deadline >= todayStr && r.deadline <= in7Str
+  ).length;
+
+  const overdueRequests = allPending.filter(r =>
+    r.deadline && r.deadline < todayStr
+  ).length;
+
+  // Chart ultimi 7 giorni
   const chartData = [];
   for (let i = 6; i >= 0; i--) {
-    const day = subDays(today, i);
-    const count = (db.prepare("SELECT count(*) as c FROM requests WHERE tenant_id=? AND date(created_at)=?").get(tid, format(day, 'yyyy-MM-dd')) as any).c;
-    chartData.push({ date: format(day, 'MMM d'), count });
+    const day      = subDays(today, i);
+    const dayStart = new Date(day); dayStart.setHours(0, 0, 0, 0);
+    const dayEnd   = new Date(day); dayEnd.setHours(23, 59, 59, 999);
+
+    const [{ c }] = await db
+      .select({ c: count() })
+      .from(requests)
+      .where(
+        and(
+          eq(requests.tenantId, tid),
+          gte(requests.createdAt, dayStart),
+          lte(requests.createdAt, dayEnd),
+        ),
+      );
+
+    chartData.push({ date: format(day, 'MMM d'), count: Number(c) });
   }
-  res.json({ pendingRequests, uploadedDocs, missingDocs: pendingRequests, expiringThisWeek, overdueRequests, chartData });
+
+  res.json({
+    pendingRequests:  Number(pendingResult.c),
+    uploadedDocs:     Number(uploadedResult.c),
+    missingDocs:      Number(pendingResult.c),
+    expiringThisWeek,
+    overdueRequests,
+    chartData,
+  });
 };
