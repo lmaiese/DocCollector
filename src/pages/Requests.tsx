@@ -10,10 +10,6 @@ import DeadlineBadge from '../components/DeadlineBadge';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config';
 
-const REQUEST_TYPES = ['FATT_ATT','FATT_PAS','BANK','F24','IVA_TRIM','MOD_730',
-  'REDDITI_PF','REDDITI_SC','IRAP','MOD_770','BILANCIO','CUD','BUSTA_PAGA',
-  'LUL','VISURA','STATUTO','VERBALE','CONTRATTO','OTHER'];
-
 const EMPTY_FORM = {
   client_id: '', period: '', doc_type_code: 'FATT_ATT',
   deadline: '', notes: '', practice_id: '',
@@ -67,8 +63,6 @@ export default function Requests() {
     api.get<Client[]>('/api/clients').then(setClients).catch(console.error);
     api.get<any[]>('/api/document-types').then(setDocTypes).catch(console.error);
   }, []);
-
-  // ─── Handlers ────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,8 +135,6 @@ export default function Requests() {
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const canReview = user?.role === 'admin' || user?.role === 'employee';
-
-  // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
@@ -388,7 +380,7 @@ export default function Requests() {
 
                           {/* Download documento approvato */}
                           {req.status === 'approved' && req.document_id && (
-                            
+                            <a
                               href={`${API_BASE_URL}/api/documents/${req.document_id}/download`}
                               className="text-indigo-600 hover:text-indigo-800 flex items-center
                                          gap-1 font-medium text-xs"
@@ -402,7 +394,7 @@ export default function Requests() {
                           {canReviewReq && (
                             <>
                               {req.document_id && (
-                                
+                                <a
                                   href={`${API_BASE_URL}/api/documents/${req.document_id}/download`}
                                   className="text-gray-500 hover:text-indigo-600 flex items-center
                                              gap-1 text-xs"
