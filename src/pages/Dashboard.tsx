@@ -6,7 +6,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { api } from '../api/clients';
+import { api } from '../api/index';
 import { DashboardStats } from '../types';
 
 export default function Dashboard({ user }: { user: any }) {
