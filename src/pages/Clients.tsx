@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Edit2, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { api } from '../api/clients';
+import { api } from '../api/index';
 import { Client } from '../types';
 
 const EMPTY_FORM = { name: '', internal_code: '', tax_id: '', email: '', phone: '', notes: '' };
