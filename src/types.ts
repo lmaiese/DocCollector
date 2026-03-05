@@ -1,6 +1,6 @@
 export type StorageProvider = 'local' | 'gdrive' | 'sharepoint';
 export type UserRole        = 'superadmin' | 'admin' | 'employee';
-export type RequestStatus   = 'pending' | 'uploaded';
+export type RequestStatus = 'pending' | 'uploaded' | 'under_review' | 'approved' | 'rejected';
 export type RequestType     = 'FATT' | 'CUD' | 'BANK' | 'OTHER';
 
 export interface Tenant {
