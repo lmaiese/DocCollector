@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Clock, CheckCircle, AlertTriangle, FolderOpen, Eye } from 'lucide-react';
-import { api } from '../../api/clients';
+import { api } from '../api/index';
 
 export default function PortalDashboard({ user }: { user: any }) {
   const [stats, setStats] = useState<any>(null);
