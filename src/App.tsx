@@ -35,9 +35,9 @@ function AppContent() {
       .then(data => {
         if (data.token && data.user) {
           login(data.user, data.token);
-          setLocation(next);
-        } else {
-          setLocation('/portale/login?error=link_expired');
+          if (data.user.role === 'client') {
+            setLocation(next); // next = '/portale' o dal param ?next=
+          }
         }
       })
       .catch(() => setLocation('/portale/login?error=network'));
