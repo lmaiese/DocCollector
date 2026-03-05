@@ -1,9 +1,20 @@
-import { v4 as uuidv4 } from 'uuid';
-import db from '../../src/db/index.ts';
+import db from '../../src/db/index.pg.ts';
+import { auditLogs } from '../../src/db/schema.pg.ts';
 
-export function logAudit(tenantId: string, userId: string | null, action: string, details?: string): void {
+export async function logAudit(
+  tenantId: string,
+  userId: string | null,
+  action: string,
+  details?: string,
+): Promise<void> {
   try {
-    db.prepare('INSERT INTO audit_logs (id, tenant_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)')
-      .run(uuidv4(), tenantId, userId, action, details ?? null);
-  } catch (err) { console.error('[AUDIT] Failed to write log:', err); }
+    await db.insert(auditLogs).values({
+      tenantId,
+      userId:  userId ?? null,
+      action,
+      details: details ?? null,
+    });
+  } catch (err) {
+    console.error('[AUDIT] Failed to write log:', err);
+  }
 }
