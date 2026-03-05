@@ -5,7 +5,8 @@ interface AuthUser {
   id: string;
   email: string;
   name: string;
-  role: 'superadmin' | 'admin' | 'employee';
+  role: 'superadmin' | 'admin' | 'employee' | 'client';
+  client_id?: string | null;
   tenant_id: string;
 }
 
