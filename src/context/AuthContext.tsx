@@ -36,12 +36,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = (userData: AuthUser, tok: string) => {
+  const login = (userData: AuthUser, tok: string, redirectTo?: string) => {
     setUser(userData);
     setToken(tok);
     localStorage.setItem('user',  JSON.stringify(userData));
     localStorage.setItem('token', tok);
-    setLocation('/');
+    setLocation(redirectTo ?? (userData.role === 'client' ? '/portale' : '/'));
   };
 
   const logout = () => {
