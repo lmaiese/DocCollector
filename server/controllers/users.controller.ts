@@ -1,26 +1,97 @@
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { eq, and } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth.ts';
-import db from '../../src/db/index.ts';
+import db from '../../src/db/index.pg.ts';
+import { users, clients } from '../../src/db/schema.pg.ts';
 import { logAudit } from '../services/audit.service.ts';
+import { emailService } from '../services/email/email.service.ts';
+import { templates } from '../services/email/templates.ts';
 
-export const getUsers    = (req: AuthRequest, res: Response): void => { res.json(db.prepare('SELECT id, email, name, role, created_at FROM users WHERE tenant_id=? ORDER BY name').all(req.user.tenant_id)); };
-export const createUser  = (req: AuthRequest, res: Response): void => {
-  const { email, name, role } = req.body;
-  if (!email) { res.status(400).json({ error: 'Email is required' }); return; }
-  if (!['admin','employee'].includes(role)) { res.status(400).json({ error: 'Role must be admin or employee' }); return; }
-  const id = uuidv4();
-  try {
-    db.prepare('INSERT INTO users (id, tenant_id, email, name, role) VALUES (?, ?, ?, ?, ?)').run(id, req.user.tenant_id, email, name || email.split('@')[0], role);
-    logAudit(req.user.tenant_id, req.user.id, 'CREATE_USER', `Created ${email} as ${role}`);
-    res.status(201).json({ id, email, name, role });
-  } catch { res.status(400).json({ error: 'User with this email already exists' }); }
+export const getUsers = async (req: AuthRequest, res: Response): Promise<void> => {
+  const rows = await db.query.users.findMany({
+    where: eq(users.tenantId, req.user.tenantId),
+    columns: { id: true, email: true, name: true, role: true,
+               clientId: true, isActive: true, createdAt: true },
+    orderBy: (u, { asc }) => [asc(u.name)],
+  });
+  res.json(rows);
 };
-export const deleteUser  = (req: AuthRequest, res: Response): void => {
+
+export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { email, name, role, clientId } = req.body;
+  if (!email) { res.status(400).json({ error: 'Email richiesta' }); return; }
+  if (!['admin', 'employee', 'client'].includes(role)) {
+    res.status(400).json({ error: 'Role deve essere admin, employee o client' }); return;
+  }
+
+  // Se ruolo client, il clientId è obbligatorio
+  if (role === 'client' && !clientId) {
+    res.status(400).json({ error: 'clientId obbligatorio per utenti con ruolo client' }); return;
+  }
+  if (role === 'client' && clientId) {
+    const client = await db.query.clients.findFirst({
+      where: and(eq(clients.id, clientId), eq(clients.tenantId, req.user.tenantId)),
+    });
+    if (!client) { res.status(404).json({ error: 'Cliente non trovato' }); return; }
+  }
+
+  try {
+    const [user] = await db.insert(users).values({
+      tenantId: req.user.tenantId, email,
+      name: name || email.split('@')[0], role,
+      clientId: clientId || null,
+    }).returning();
+
+    await logAudit(req.user.tenantId, req.user.id, 'CREATE_USER',
+      `Creato ${email} come ${role}`);
+
+    // Se è un utente client, invia subito magic link di benvenuto
+    if (role === 'client') {
+      const { v4: uuid } = await import('uuid');
+      const token     = uuid();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 giorni per primo accesso
+
+      await db.insert((await import('../../src/db/schema.pg.ts')).clientTokens).values({
+        tenantId: req.user.tenantId, userId: user.id, token, expiresAt,
+      });
+
+      const magicUrl = `${process.env.APP_URL}/portale/accesso?token=${token}`;
+      const tenant   = await db.query.tenants.findFirst({
+        where: eq((await import('../../src/db/schema.pg.ts')).tenants.id, req.user.tenantId),
+      });
+      const client   = clientId ? await db.query.clients.findFirst({
+        where: eq(clients.id, clientId),
+      }) : null;
+
+      const tpl = templates.magicLink(
+        { name: tenant?.name || 'Lo Studio', primaryColor: tenant?.primaryColor || '#4f46e5',
+          logoUrl: tenant?.logoUrl, emailSignature: tenant?.emailSignature },
+        { clientName: client?.name || name || email, magicUrl },
+      );
+      await emailService.sendNow({
+        tenantId: req.user.tenantId, toEmail: email,
+        subject: `Benvenuto su ${tenant?.name || 'DocCollector+'}! Accedi al portale`,
+        bodyHtml: tpl.bodyHtml, type: 'magic_link', userId: user.id,
+      });
+    }
+
+    res.status(201).json({ id: user.id, email, name: user.name, role });
+  } catch {
+    res.status(400).json({ error: 'Utente con questa email già esistente' });
+  }
+};
+
+export const deleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
-  if (id === req.user.id) { res.status(400).json({ error: 'Cannot delete your own account' }); return; }
-  if (!db.prepare('SELECT * FROM users WHERE id=? AND tenant_id=?').get(id, req.user.tenant_id)) { res.status(404).json({ error: 'User not found' }); return; }
-  db.prepare('DELETE FROM users WHERE id=?').run(id);
-  logAudit(req.user.tenant_id, req.user.id, 'DELETE_USER', `Deleted user id: ${id}`);
+  if (id === req.user.id) {
+    res.status(400).json({ error: 'Non puoi eliminare il tuo account' }); return;
+  }
+  const user = await db.query.users.findFirst({
+    where: and(eq(users.id, id), eq(users.tenantId, req.user.tenantId)),
+  });
+  if (!user) { res.status(404).json({ error: 'Utente non trovato' }); return; }
+  await db.delete(users).where(eq(users.id, id));
+  await logAudit(req.user.tenantId, req.user.id, 'DELETE_USER', `Eliminato ${user.email}`);
   res.json({ success: true });
 };
