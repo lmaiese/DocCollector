@@ -13,9 +13,15 @@ import { logAudit } from '../services/audit.service.ts';
 import { emailService } from '../services/email/email.service.ts';
 import { templates } from '../services/email/templates.ts';
 
-function getStorage(tenantId: string) {
-  // Usa lo storage configurato per il tenant
-  return createStorageService('local', '{}');
+async function getStorage(tenantId: string) {
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.id, tenantId),
+    columns: { storageProvider: true, storageConfig: true },
+  });
+  return createStorageService(
+    tenant?.storageProvider || 'local',
+    JSON.stringify(tenant?.storageConfig || {}),
+  );
 }
 
 // ─── Dashboard cliente ─────────────────────────────────────────────────────
