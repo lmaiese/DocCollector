@@ -3,7 +3,7 @@ import { useRoute, Link } from 'wouter';
 import { CheckCircle, XCircle, Clock, Eye, ArrowLeft,
          Upload, MessageSquare, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { api } from '../api/clients';
+import { api } from '../api/index';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config';
 
