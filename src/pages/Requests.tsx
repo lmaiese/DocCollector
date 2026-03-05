@@ -341,14 +341,14 @@ export default function Requests() {
                     }`}>
                       {/* Cliente */}
                       <td className="p-4 font-medium text-gray-900">
-                        {req.client_name}
+                        {req.clientName}
                       </td>
 
                       {/* Tipo documento */}
                       <td className="p-4">
                         <span className="px-2 py-1 bg-indigo-50 text-indigo-700
                                          rounded text-xs font-semibold">
-                          {req.docTypeLabel || (req as any).doc_type_code || req.type}
+                          {req.docTypeLabel || req.doc_type_code || req.type}
                         </span>
                       </td>
 
@@ -379,9 +379,9 @@ export default function Requests() {
                         <div className="flex items-center gap-2 flex-wrap">
 
                           {/* Download documento approvato */}
-                          {req.status === 'approved' && req.document_id && (
+                          {req.status === 'approved' && req.documentId && (
                             <a
-                              href={`${API_BASE_URL}/api/documents/${req.document_id}/download`}
+                              href={`${API_BASE_URL}/api/documents/${req.documentId}/download`}
                               className="text-indigo-600 hover:text-indigo-800 flex items-center
                                          gap-1 font-medium text-xs"
                               download
@@ -393,9 +393,9 @@ export default function Requests() {
                           {/* Download + bottoni revisione per uploaded/under_review */}
                           {canReviewReq && (
                             <>
-                              {req.document_id && (
+                              {req.documentId && (
                                 <a
-                                  href={`${API_BASE_URL}/api/documents/${req.document_id}/download`}
+                                  href={`${API_BASE_URL}/api/documents/${req.documentId}/download`}
                                   className="text-gray-500 hover:text-indigo-600 flex items-center
                                              gap-1 text-xs"
                                   download
@@ -449,9 +449,9 @@ export default function Requests() {
                           )}
 
                           {/* Elimina documento (uploaded/under_review) */}
-                          {['uploaded','under_review'].includes(req.status) && req.document_id && canReview && (
+                          {['uploaded','under_review'].includes(req.status) && req.documentId && canReview && (
                             <button
-                              onClick={() => handleDeleteDocument(req.document_id!)}
+                              onClick={() => handleDeleteDocument(req.documentId!)}
                               className="text-gray-400 hover:text-red-600 transition-colors"
                               title="Elimina documento"
                             >
