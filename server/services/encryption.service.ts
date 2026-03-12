@@ -17,12 +17,21 @@ export class EncryptionService {
   private keyId: string;
 
   constructor() {
-    const hex = process.env.ENCRYPTION_KEY;
+  const hex = process.env.ENCRYPTION_KEY;
+  if (process.env.NODE_ENV === 'production') {
     if (!hex || hex.length !== 64)
-      throw new Error('ENCRYPTION_KEY: stringa hex 64 char (256 bit) richiesta');
-    this.key   = Buffer.from(hex, 'hex');
-    this.keyId = process.env.ENCRYPTION_KEY_ID || 'key-v1';
+      throw new Error('ENCRYPTION_KEY: stringa hex 64 char richiesta in produzione');
+    this.key = Buffer.from(hex, 'hex');
+  } else {
+    // Chiave fissa solo per sviluppo locale — mai usare in prod
+    this.key = Buffer.from(
+      hex || 'dev0000000000000000000000000000000000000000000000000000000000000000',
+      'hex'
+    );
+    if (!hex) console.warn('[WARN] ENCRYPTION_KEY non impostata: uso chiave di sviluppo');
   }
+  this.keyId = process.env.ENCRYPTION_KEY_ID || 'key-v1';
+}
 
   encrypt(plain: Buffer): EncryptedPayload {
     const iv      = crypto.randomBytes(IV_LENGTH);

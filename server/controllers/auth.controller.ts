@@ -8,6 +8,8 @@ import {
 import { logAudit } from '../services/audit.service.ts';
 import { emailService } from '../services/email/email.service.ts';
 import { templates } from '../services/email/templates.ts';
+import jwt from 'jsonwebtoken';
+
 
 // ─── Google / mock login (staff) ──────────────────────────────────────────
 export const googleLogin = async (req: Request, res: Response): Promise<void> => {
@@ -30,7 +32,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
   await logAudit(user.tenantId, user.id, 'LOGIN', `${user.email} logged in`);
 
   res.json({
-    token: `jwt-for-${user.id}`,
+    token: jwt.sign({ sub: user.id }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '7d' }),
     user: { id: user.id, email: user.email, name: user.name,
             role: user.role, tenant_id: user.tenantId, client_id: user.clientId },
   });
@@ -110,7 +112,7 @@ export const verifyMagicLink = async (req: Request, res: Response): Promise<void
   await logAudit(user.tenantId, user.id, 'CLIENT_LOGIN', `Magic link usato da ${user.email}`);
 
   res.json({
-    token: `jwt-for-${user.id}`,
+    token: jwt.sign({ sub: user.id }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '7d' }),
     user: { id: user.id, email: user.email, name: user.name,
             role: user.role, tenant_id: user.tenantId, client_id: user.clientId },
   });
@@ -135,7 +137,7 @@ export const registerTenant = async (req: Request, res: Response): Promise<void>
   }).returning();
 
   res.json({
-    token: `jwt-for-${user.id}`,
+    token: jwt.sign({ sub: user.id }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '7d' }),
     user: { id: user.id, email, name: user.name, role: 'admin', tenant_id: tenant.id },
   });
 };

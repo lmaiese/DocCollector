@@ -47,34 +47,38 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       `Creato ${email} come ${role}`);
 
     // Se è un utente client, invia subito magic link di benvenuto
-    if (role === 'client') {
-      const { v4: uuid } = await import('uuid');
-      const token     = uuid();
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 giorni per primo accesso
+if (role === 'client') {
+  const token     = uuidv4();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-      await db.insert((await import('../../src/db/schema.pg.ts')).clientTokens).values({
-        tenantId: req.user.tenantId, userId: user.id, token, expiresAt,
-      });
+  await db.insert(clientTokens).values({
+    tenantId: req.user.tenantId, userId: user.id, token, expiresAt,
+  });
 
-      const magicUrl = `${process.env.APP_URL}/portale/accesso?token=${token}`;
-      const tenant   = await db.query.tenants.findFirst({
-        where: eq((await import('../../src/db/schema.pg.ts')).tenants.id, req.user.tenantId),
-      });
-      const client   = clientId ? await db.query.clients.findFirst({
-        where: eq(clients.id, clientId),
-      }) : null;
+  const magicUrl = `${process.env.APP_URL}/portale/accesso?token=${token}`;
+  const tenant   = await db.query.tenants.findFirst({
+    where: eq(tenants.id, req.user.tenantId),
+  });
+  const client = clientId
+    ? await db.query.clients.findFirst({ where: eq(clients.id, clientId) })
+    : null;
 
-      const tpl = templates.magicLink(
-        { name: tenant?.name || 'Lo Studio', primaryColor: tenant?.primaryColor || '#4f46e5',
-          logoUrl: tenant?.logoUrl, emailSignature: tenant?.emailSignature },
-        { clientName: client?.name || name || email, magicUrl },
-      );
-      await emailService.sendNow({
-        tenantId: req.user.tenantId, toEmail: email,
-        subject: `Benvenuto su ${tenant?.name || 'DocCollector+'}! Accedi al portale`,
-        bodyHtml: tpl.bodyHtml, type: 'magic_link', userId: user.id,
-      });
-    }
+  const tpl = templates.magicLink(
+    {
+      name: tenant?.name || 'Lo Studio',
+      primaryColor: tenant?.primaryColor || '#4f46e5',
+      logoUrl: tenant?.logoUrl,
+      emailSignature: tenant?.emailSignature,
+    },
+    { clientName: client?.name || name || email, magicUrl },
+  );
+
+  await emailService.sendNow({
+    tenantId: req.user.tenantId, toEmail: email,
+    subject: `Benvenuto su ${tenant?.name || 'DocCollector+'}! Accedi al portale`,
+    bodyHtml: tpl.bodyHtml, type: 'magic_link', userId: user.id,
+  });
+}
 
     res.status(201).json({ id: user.id, email, name: user.name, role });
   } catch {

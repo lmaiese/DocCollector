@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { eq } from 'drizzle-orm';
 import db from '../../src/db/index.pg.ts';
 import { users } from '../../src/db/schema.pg.ts';
+import jwt from 'jsonwebtoken';
+
 
 export interface AuthRequest extends Request { user?: any; }
 
@@ -10,9 +12,14 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   if (!authHeader) { res.status(401).json({ error: 'No token provided' }); return; }
 
   const token = authHeader.split(' ')[1];
-  if (!token?.startsWith('jwt-for-')) { res.status(401).json({ error: 'Invalid token format' }); return; }
+let userId: string;
 
-  const userId = token.replace('jwt-for-', '');
+try {
+  const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as { sub: string };
+  userId = payload.sub;
+} catch {
+  res.status(401).json({ error: 'Token non valido o scaduto' }); return;
+}
 
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
