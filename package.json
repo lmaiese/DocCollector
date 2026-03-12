@@ -21,7 +21,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rimraf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

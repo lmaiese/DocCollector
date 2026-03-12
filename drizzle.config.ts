@@ -1,7 +1,11 @@
+import 'dotenv/config';
 import type { Config } from 'drizzle-kit';
+
 export default {
   schema:    './src/db/schema.pg.ts',
   out:       './src/db/migrations',
-  driver:    'pg',
-  dbCredentials: { connectionString: process.env.DATABASE_URL! },
+  dialect:   'postgresql',
+  dbCredentials: {
+    url: process.env.DATABASE_URL!.replace('localhost', '127.0.0.1'),
+  },
 } satisfies Config;
