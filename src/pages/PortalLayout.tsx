@@ -8,10 +8,11 @@ export default function PortalLayout({ children, user, onLogout }: Props) {
   const [location] = useLocation();
 
   const nav = [
-    { href: '/portale',           label: 'Riepilogo',  icon: FileText },
+    { href: '/portale',           label: 'Riepilogo',           icon: FileText },
     { href: '/portale/richieste', label: 'Documenti Richiesti', icon: Clock },
-    { href: '/portale/pratiche',  label: 'Pratiche',   icon: FolderOpen },
-    { href: '/portale/ricevuti',  label: 'Documenti Ricevuti', icon: Download },
+    // Temporaneamente commentati fino a Sprint 2/4:
+    // { href: '/portale/pratiche',  label: 'Pratiche',            icon: FolderOpen },
+    // { href: '/portale/ricevuti',  label: 'Documenti Ricevuti',  icon: Download },
   ];
 
   return (

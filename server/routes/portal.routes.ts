@@ -4,6 +4,7 @@ import {
   getPortalDashboard,
   getPortalRequests,
   getPortalDocuments,
+  downloadPortalDocument,  
   uploadPortalDocument,
   getPortalPractices,
   addPortalComment,

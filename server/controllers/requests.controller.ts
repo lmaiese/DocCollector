@@ -1,11 +1,11 @@
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and, desc, ilike, or } from 'drizzle-orm';
+import { eq, and, desc, ilike, or, isNull } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth.ts';
 import db from '../../src/db/index.pg.ts';
 import {
   requests, clients, documents, users,
-  tenants, documentTypes, clientTokens,
+  tenants, documentTypes, clientTokens, practices,
 } from '../../src/db/schema.pg.ts';
 import { logAudit } from '../services/audit.service.ts';
 import { emailService } from '../services/email/email.service.ts';
@@ -32,7 +32,15 @@ export const getRequests = async (req: AuthRequest, res: Response): Promise<void
     })
     .from(requests)
     .innerJoin(clients, eq(clients.id, requests.clientId))
-    .leftJoin(documentTypes, eq(documentTypes.code, requests.docTypeCode))
+    .leftJoin(documentTypes,
+  and(
+    eq(documentTypes.code, requests.docTypeCode),
+    or(
+      isNull(documentTypes.tenantId),
+      eq(documentTypes.tenantId, req.user.tenantId),
+    )
+  )
+)
     .leftJoin(documents, eq(documents.requestId, requests.id))
     .where(and(...conditions))
     .orderBy(desc(requests.createdAt));

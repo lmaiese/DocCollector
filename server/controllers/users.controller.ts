@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { eq, and } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth.ts';
 import db from '../../src/db/index.pg.ts';
-import { users, clients } from '../../src/db/schema.pg.ts';
+import { users, clients, clientTokens, tenants } from '../../src/db/schema.pg.ts';
 import { logAudit } from '../services/audit.service.ts';
 import { emailService } from '../services/email/email.service.ts';
 import { templates } from '../services/email/templates.ts';

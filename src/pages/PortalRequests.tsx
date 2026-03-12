@@ -176,7 +176,7 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, comment,
           {req.documentFilename && (
             <p className="text-sm text-gray-600 mb-4">
               <strong>File caricato:</strong>{' '}
-              <a href={`${API_BASE_URL}/api/documents/${req.documentId}/download`}
+              <a href={`${API_BASE_URL}/api/portal/documents/${req.documentId}/download`}
                 className="text-indigo-600 hover:underline" download>
                 {req.documentFilename}
               </a>

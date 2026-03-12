@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { eq, and, desc, or } from 'drizzle-orm';
+import { eq, and, desc, or, isNull } from 'drizzle-orm';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthRequest } from '../middleware/auth.ts';
@@ -98,7 +98,14 @@ export const getPortalRequests = async (req: AuthRequest, res: Response): Promis
     })
     .from(requests)
     .leftJoin(documentTypes,
-      and(eq(documentTypes.code, requests.docTypeCode)))
+      and(
+        eq(documentTypes.code, requests.docTypeCode),
+        or(
+          isNull(documentTypes.tenantId),
+          eq(documentTypes.tenantId, req.user.tenantId),
+        )
+      )
+    )
     .leftJoin(documents, eq(documents.requestId, requests.id))
     .where(and(...conditions))
     .orderBy(desc(requests.createdAt));
