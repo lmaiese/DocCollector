@@ -1,6 +1,7 @@
+// server/controllers/auth.controller.ts
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and, gt, lt } from 'drizzle-orm';
 import db from '../../src/db/index.pg.ts';
 import {
   users, tenants, clients, clientTokens,
@@ -43,14 +44,13 @@ export const requestMagicLink = async (req: Request, res: Response): Promise<voi
   const { email } = req.body;
   if (!email) { res.status(400).json({ error: 'Email richiesta' }); return; }
 
-  // Trova utente con ruolo client
   const user = await db.query.users.findFirst({
     where: and(eq(users.email, email), eq(users.role, 'client')),
   });
 
   // Risposta sempre 200 (sicurezza: non rivelare se email esiste)
   if (!user || !user.isActive) {
-    res.json({ message: 'Se l\'email è registrata, riceverai il link di accesso.' });
+    res.json({ message: "Se l'email è registrata, riceverai il link di accesso." });
     return;
   }
 
@@ -59,7 +59,14 @@ export const requestMagicLink = async (req: Request, res: Response): Promise<voi
     ? await db.query.clients.findFirst({ where: eq(clients.id, user.clientId) })
     : null;
 
-  // Genera token opaco con scadenza 72h
+  // FIX: invalida tutti i token precedenti non ancora usati dello stesso utente
+  await db.update(clientTokens)
+    .set({ usedAt: new Date() })
+    .where(and(
+      eq(clientTokens.userId, user.id),
+      eq(clientTokens.usedAt, null as any),
+    ));
+
   const token     = uuidv4();
   const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
 
@@ -81,7 +88,7 @@ export const requestMagicLink = async (req: Request, res: Response): Promise<voi
   });
 
   await logAudit(user.tenantId, user.id, 'MAGIC_LINK_SENT', email);
-  res.json({ message: 'Se l\'email è registrata, riceverai il link di accesso.' });
+  res.json({ message: "Se l'email è registrata, riceverai il link di accesso." });
 };
 
 // ─── Magic Link — verifica token e crea sessione ──────────────────────────
@@ -90,7 +97,10 @@ export const verifyMagicLink = async (req: Request, res: Response): Promise<void
   if (!token) { res.status(400).json({ error: 'Token mancante' }); return; }
 
   const record = await db.query.clientTokens.findFirst({
-    where: and(eq(clientTokens.token, token), gt(clientTokens.expiresAt, new Date())),
+    where: and(
+      eq(clientTokens.token, token),
+      gt(clientTokens.expiresAt, new Date()),
+    ),
   });
 
   if (!record) {
@@ -102,8 +112,10 @@ export const verifyMagicLink = async (req: Request, res: Response): Promise<void
     return;
   }
 
-  // Invalida il token (monouso)
-  await db.update(clientTokens).set({ usedAt: new Date() }).where(eq(clientTokens.id, record.id));
+  // Invalida il token (monouso) — fatto PRIMA di rispondere
+  await db.update(clientTokens)
+    .set({ usedAt: new Date() })
+    .where(eq(clientTokens.id, record.id));
 
   const user = await db.query.users.findFirst({ where: eq(users.id, record.userId) });
   if (!user || !user.isActive) { res.status(403).json({ error: 'Account non valido' }); return; }

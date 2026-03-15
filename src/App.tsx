@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+// src/App.tsx
+import React, { useEffect, useState } from 'react';
 import { Route, Switch, useLocation } from 'wouter';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -19,9 +20,20 @@ import PortalDashboard from './pages/PortalDashboard';
 import PortalRequests  from './pages/PortalRequests';
 import { API_BASE_URL } from './config';
 
+// Schermo di caricamento riutilizzabile
+function Spinner() {
+  return (
+    <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" />
+    </div>
+  );
+}
+
 function AppContent() {
   const { user, login, logout, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
+  // FIX: stato separato per il verify del magic link
+  const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
     if (!location.startsWith('/portale/accesso')) return;
@@ -35,33 +47,31 @@ function AppContent() {
       return;
     }
 
+    // FIX: imposta verifying PRIMA del fetch per bloccare il render di ClientLogin
+    setVerifying(true);
+
     fetch(`${API_BASE_URL}/api/auth/verify-token?token=${encodeURIComponent(token)}`)
       .then(r => r.json())
       .then(data => {
         if (data.token && data.user) {
           login(data.user, data.token, next);
+          // Pulisce l'URL dal token per sicurezza
           window.history.replaceState({}, '', next);
         } else {
           setLocation('/portale/login?error=invalid_token');
         }
       })
-      .catch(() => setLocation('/portale/login?error=network'));
+      .catch(() => setLocation('/portale/login?error=network'))
+      .finally(() => setVerifying(false));
   }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center h-screen bg-gray-50">
-      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" />
-    </div>
-  );
+  if (isLoading || verifying) return <Spinner />;
 
   // ── Route portale cliente ──────────────────────────────────────────────
   if (location.startsWith('/portale')) {
-    if (location === '/portale/accesso' || location.startsWith('/portale/accesso?')) {
-      return (
-        <div className="flex items-center justify-center h-screen bg-gray-50">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" />
-        </div>
-      );
+    // FIX: /portale/accesso è gestito dall'useEffect sopra — mostra solo spinner
+    if (location.startsWith('/portale/accesso')) {
+      return <Spinner />;
     }
 
     if (!user || user.role !== 'client') {

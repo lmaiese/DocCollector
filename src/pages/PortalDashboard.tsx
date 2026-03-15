@@ -1,5 +1,7 @@
+// src/pages/PortalDashboard.tsx
 import React, { useEffect, useState } from 'react';
-import { Clock, CheckCircle, AlertTriangle, FolderOpen, Eye } from 'lucide-react';
+import { Clock, CheckCircle, AlertTriangle, FolderOpen, Eye, XCircle } from 'lucide-react';
+import { Link } from 'wouter';
 import { api } from '../api/index';
 
 export default function PortalDashboard({ user }: { user: any }) {
@@ -15,6 +17,9 @@ export default function PortalDashboard({ user }: { user: any }) {
     </div>
   );
 
+  // Totale "in lavorazione" = uploaded + under_review
+  const inProgress = (stats.uploaded || 0) + (stats.underReview || 0);
+
   return (
     <div className="space-y-6">
       <div>
@@ -27,12 +32,12 @@ export default function PortalDashboard({ user }: { user: any }) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard icon={Clock}         color="yellow" label="Da caricare"    value={stats.pending} />
-        <StatCard icon={Eye}           color="blue"   label="In revisione"   value={stats.underReview} />
-        <StatCard icon={CheckCircle}   color="green"  label="Approvati"      value={stats.approved} />
-        <StatCard icon={AlertTriangle} color="red"    label="Scaduti"        value={stats.overdue} />
-        <StatCard icon={AlertTriangle} color="orange" label="In scadenza"    value={stats.expiring} />
-        <StatCard icon={FolderOpen}    color="purple" label="In lavorazione" value={stats.uploaded} />
+        <StatCard icon={Clock}         color="yellow" label="Da caricare"      value={stats.pending}    />
+        <StatCard icon={Eye}           color="blue"   label="Caricati"         value={inProgress}       />
+        <StatCard icon={CheckCircle}   color="green"  label="Approvati"        value={stats.approved}   />
+        <StatCard icon={AlertTriangle} color="red"    label="Scaduti"          value={stats.overdue}    />
+        <StatCard icon={AlertTriangle} color="orange" label="In scadenza (7gg)" value={stats.expiring}  />
+        <StatCard icon={XCircle}       color="purple" label="Da ricaricare"    value={0}                />
       </div>
 
       {stats.overdue > 0 && (
@@ -55,6 +60,15 @@ export default function PortalDashboard({ user }: { user: any }) {
           </p>
         </div>
       )}
+
+      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+        <p className="text-sm text-indigo-700">
+          Hai documenti da caricare?{' '}
+          <Link href="/portale/richieste" className="font-semibold underline">
+            Vai alle richieste →
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

@@ -48,6 +48,9 @@ export const getRequests = async (req: AuthRequest, res: Response): Promise<void
   res.json(rows);
 };
 
+// Dentro server/controllers/requests.controller.ts
+// Sostituisci solo la funzione createRequest
+
 export const createRequest = async (req: AuthRequest, res: Response): Promise<void> => {
   const { client_id, period, doc_type_code, deadline, notes, practice_id } = req.body;
   if (!client_id || !period || !doc_type_code) {
@@ -76,7 +79,8 @@ export const createRequest = async (req: AuthRequest, res: Response): Promise<vo
   await logAudit(req.user.tenantId, req.user.id, 'CREATE_REQUEST',
     `${doc_type_code} per ${client.name} periodo ${period}`);
 
-  // Invia email al cliente se ha un utente associato
+  // FIX: determina email destinatario con priorità corretta
+  // 1) utente cliente registrato, 2) email anagrafica cliente
   const clientUser = await db.query.users.findFirst({
     where: and(
       eq(users.clientId, client_id),
@@ -84,18 +88,23 @@ export const createRequest = async (req: AuthRequest, res: Response): Promise<vo
     ),
   });
 
-  if (clientUser?.email && client.email) {
+  const emailTo = clientUser?.email || client.email;
+
+  if (emailTo) {
     const tenant = await db.query.tenants.findFirst({
       where: eq(tenants.id, req.user.tenantId),
     });
 
-    // Genera nuovo magic link per accesso diretto alla richiesta
-    const token     = uuidv4();
-    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
-    await db.insert(clientTokens).values({
-      tenantId: req.user.tenantId, userId: clientUser.id, token, expiresAt,
-    });
-    const portalUrl = `${process.env.APP_URL}/portale/accesso?token=${token}&next=/portale/richieste`;
+    // Genera magic link solo se c'è un utente cliente registrato
+    let portalUrl = `${process.env.APP_URL}/portale`;
+    if (clientUser) {
+      const token     = uuidv4();
+      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+      await db.insert(clientTokens).values({
+        tenantId: req.user.tenantId, userId: clientUser.id, token, expiresAt,
+      });
+      portalUrl = `${process.env.APP_URL}/portale/accesso?token=${token}&next=/portale/richieste`;
+    }
 
     const tpl = templates.requestCreated(
       { name: tenant?.name || 'Lo Studio', primaryColor: tenant?.primaryColor || '#4f46e5',
@@ -105,7 +114,7 @@ export const createRequest = async (req: AuthRequest, res: Response): Promise<vo
     );
 
     await emailService.queue({
-      tenantId: req.user.tenantId, toEmail: client.email,
+      tenantId: req.user.tenantId, toEmail: emailTo,
       subject: tpl.subject, bodyHtml: tpl.bodyHtml,
       type: 'request_created', refType: 'request', refId: request.id,
     });

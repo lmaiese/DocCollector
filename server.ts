@@ -83,6 +83,8 @@ cron.schedule('0 3 * * *', async () => {
   }
 });
 
+// server.ts — sostituisci la funzione startServer() completa
+
 async function startServer() {
   await initDb();
   await seedDb();
@@ -106,9 +108,6 @@ async function startServer() {
   app.use('/api/document-types', docTypeRoutes);
   app.use('/api/requests/:requestId/comments', commentRoutes);
 
-  // Worker email: ogni 2 minuti processa la coda
-  cron.schedule('*/2 * * * *', () => emailService.processQueue());
-
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
@@ -119,7 +118,19 @@ async function startServer() {
 
   app.use(notFound);
   app.use(errorHandler);
-  app.listen(PORT, '0.0.0.0', () => console.log(`[Server] http://localhost:${PORT}`));
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[Server] http://localhost:${PORT}`);
+
+    // FIX: registra i cron DOPO che il server è in ascolto
+    // così DB e services sono sicuramente pronti
+    cron.schedule('*/2 * * * *', async () => {
+      try { await emailService.processQueue(); }
+      catch (err) { console.error('[Cron] Email queue error:', err); }
+    });
+
+    console.log('[Cron] Email queue worker avviato (ogni 2 min)');
+  });
 }
 
 startServer().catch(err => { console.error('[Server] Fatal:', err); process.exit(1); });
