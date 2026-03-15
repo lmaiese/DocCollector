@@ -1,21 +1,47 @@
+// src/components/DeadlineBadge.tsx
 import React from 'react';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
-import { AlertTriangle, Clock, CheckCircle } from 'lucide-react';
+import { AlertTriangle, Clock, CheckCircle, Eye, XCircle } from 'lucide-react';
 
 interface DeadlineBadgeProps {
   deadline?: string | null;
-  status: 'pending' | 'uploaded';
+  status: 'pending' | 'uploaded' | 'under_review' | 'approved' | 'rejected';
 }
 
 export default function DeadlineBadge({ deadline, status }: DeadlineBadgeProps) {
-  if (status === 'uploaded') {
+  if (status === 'approved') {
     return (
       <span className="flex items-center gap-1 text-green-600 text-xs font-medium">
-        <CheckCircle className="w-3 h-3" /> Completato
+        <CheckCircle className="w-3 h-3" /> Approvato
       </span>
     );
   }
 
+  if (status === 'under_review') {
+    return (
+      <span className="flex items-center gap-1 text-purple-600 text-xs font-medium">
+        <Eye className="w-3 h-3" /> In revisione
+      </span>
+    );
+  }
+
+  if (status === 'rejected') {
+    return (
+      <span className="flex items-center gap-1 text-red-600 text-xs font-medium">
+        <XCircle className="w-3 h-3" /> Rifiutato
+      </span>
+    );
+  }
+
+  if (status === 'uploaded') {
+    return (
+      <span className="flex items-center gap-1 text-blue-600 text-xs font-medium">
+        <Eye className="w-3 h-3" /> Caricato
+      </span>
+    );
+  }
+
+  // pending — mostra scadenza
   if (!deadline) return <span className="text-gray-400 text-xs">—</span>;
 
   const today = new Date();

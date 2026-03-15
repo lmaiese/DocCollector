@@ -84,9 +84,9 @@ export const users = pgTable('users', {
 }));
 
 // ─── Document Types ────────────────────────────────────────────────────────
+// src/db/schema.pg.ts — SOSTITUISCI solo il blocco documentTypes (righe dalla definizione della tabella)
 export const documentTypes = pgTable('document_types', {
   id:          uuid('id').primaryKey().defaultRandom(),
-  // NULL = tipo di sistema (condiviso tra tutti i tenant)
   tenantId:    uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   code:        text('code').notNull(),
   label:       text('label').notNull(),
@@ -97,11 +97,9 @@ export const documentTypes = pgTable('document_types', {
   sortOrder:   integer('sort_order').default(0),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
-  // Nota: PostgreSQL tratta NULL != NULL in unique index,
-  // quindi più tipi di sistema con stesso code sono bloccati solo
-  // se entrambi hanno tenantId non-null identico. I tipi di sistema
-  // (tenantId=NULL) non entrano mai in conflitto tra loro per design.
-  tenantCodeIdx: uniqueIndex('doc_types_tenant_code_idx').on(t.tenantId, t.code),
+  // Indice normale (non unique) — il controllo duplicati va fatto a livello applicativo
+  // perché PostgreSQL non può fare UNIQUE su colonna nullable in modo affidabile cross-versione
+  tenantCodeIdx: index('doc_types_tenant_code_idx').on(t.tenantId, t.code),
 }));
 
 // ─── Practices ─────────────────────────────────────────────────────────────

@@ -19,18 +19,36 @@ export const getDocumentTypes = async (req: AuthRequest, res: Response): Promise
   res.json(rows);
 };
 
+// server/controllers/document-types.controller.ts — SOSTITUISCI createDocumentType
 export const createDocumentType = async (req: AuthRequest, res: Response): Promise<void> => {
   const { code, label, description, category } = req.body;
   if (!code || !label) {
     res.status(400).json({ error: 'code e label sono obbligatori' }); return;
   }
+
+  const normalizedCode = code.toUpperCase().replace(/\s/g, '_');
+
+  // Controlla duplicati a livello applicativo (evita problemi con NULL unique in PG)
+  const existing = await db.query.documentTypes.findFirst({
+    where: and(
+      eq(documentTypes.code, normalizedCode),
+      eq(documentTypes.tenantId, req.user.tenantId),
+      eq(documentTypes.isActive, true),
+    ),
+  });
+  if (existing) {
+    res.status(400).json({ error: `Esiste già un tipo documento con codice "${normalizedCode}"` }); return;
+  }
+
   const [dt] = await db.insert(documentTypes).values({
     tenantId: req.user.tenantId,
-    code: code.toUpperCase().replace(/\s/g, '_'),
-    label, description: description || null,
-    category: category || 'Altro',
-    isSystem: false,
+    code:     normalizedCode,
+    label,
+    description: description || null,
+    category:    category    || 'Altro',
+    isSystem:    false,
   }).returning();
+
   res.status(201).json(dt);
 };
 

@@ -1,3 +1,4 @@
+// server.ts — SOSTITUISCI l'intero file
 import 'dotenv/config';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
@@ -18,10 +19,11 @@ import portalRoutes    from './server/routes/portal.routes.ts';
 import commentRoutes   from './server/routes/comments.routes.ts';
 import practiceRoutes  from './server/routes/practices.routes.ts';
 import docTypeRoutes   from './server/routes/document-types.routes.ts';
+import campaignRoutes  from './server/routes/campaigns.routes.ts';
 
 import cron from 'node-cron';
 import { db } from './src/db/index.pg.ts';
-import { requests, users, clients, tenants, documentTypes, clientTokens } from './src/db/schema.pg.ts';
+import { requests, users, clients, tenants, documentTypes, clientTokens, documents } from './src/db/schema.pg.ts';
 import { eq, and, lt } from 'drizzle-orm';
 import { templates } from './server/services/email/templates.ts';
 
@@ -53,12 +55,16 @@ cron.schedule('0 8 * * *', async () => {
       if (!emailTo || !tenant) continue;
 
       const tpl = templates.deadlineReminder(
-        { name: tenant.name, primaryColor: tenant.primaryColor || '#4f46e5',
-          logoUrl: tenant.logoUrl, emailSignature: tenant.emailSignature },
-        { clientName: client?.name || emailTo,
+        {
+          name: tenant.name, primaryColor: tenant.primaryColor || '#4f46e5',
+          logoUrl: tenant.logoUrl, emailSignature: tenant.emailSignature,
+        },
+        {
+          clientName:   client?.name || emailTo,
           docTypeLabel: docType?.label || req.docTypeCode,
-          deadline: req.deadline!, daysLeft,
-          portalUrl: `${process.env.APP_URL}/portale/richieste` },
+          deadline:     req.deadline!, daysLeft,
+          portalUrl:    `${process.env.APP_URL}/portale/richieste`,
+        },
       );
 
       await emailService.queue({
@@ -70,20 +76,45 @@ cron.schedule('0 8 * * *', async () => {
   }
 });
 
-// ─── FIX: Cron cleanup token scaduti (ogni notte alle 03:00) ───────────────
-// Senza questo i clientTokens si accumulano indefinitamente
+// ─── Cron: cleanup token scaduti (ogni notte alle 03:00) ───────────────────
 cron.schedule('0 3 * * *', async () => {
   try {
-    const result = await db.delete(clientTokens).where(
-      lt(clientTokens.expiresAt, new Date())
-    );
+    await db.delete(clientTokens).where(lt(clientTokens.expiresAt, new Date()));
     console.log('[Cron] Token scaduti eliminati');
   } catch (err) {
     console.error('[Cron] Errore cleanup token:', err);
   }
 });
 
-// server.ts — sostituisci la funzione startServer() completa
+// ─── Cron: GDPR retention — archivia documenti oltre N anni (ogni domenica 02:00) ──
+cron.schedule('0 2 * * 0', async () => {
+  try {
+    const allTenants = await db.query.tenants.findMany({
+      columns: { id: true, retentionYears: true },
+    });
+
+    for (const tenant of allTenants) {
+      const years = tenant.retentionYears ?? 10;
+      const cutoff = new Date();
+      cutoff.setFullYear(cutoff.getFullYear() - years);
+
+      // Soft-archive: marca isArchived=true i documenti oltre la soglia
+      const result = await db.update(documents)
+        .set({ isArchived: true })
+        .where(
+          and(
+            eq(documents.tenantId, tenant.id),
+            eq(documents.isArchived, false),
+            lt(documents.createdAt, cutoff),
+          ),
+        );
+
+      console.log(`[Cron][GDPR] Tenant ${tenant.id}: documenti archiviati`);
+    }
+  } catch (err) {
+    console.error('[Cron][GDPR] Errore retention:', err);
+  }
+});
 
 async function startServer() {
   await initDb();
@@ -106,6 +137,7 @@ async function startServer() {
   app.use('/api/portal',         portalRoutes);
   app.use('/api/practices',      practiceRoutes);
   app.use('/api/document-types', docTypeRoutes);
+  app.use('/api/campaigns',      campaignRoutes);   // ← NUOVO
   app.use('/api/requests/:requestId/comments', commentRoutes);
 
   if (process.env.NODE_ENV !== 'production') {
@@ -122,14 +154,13 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Server] http://localhost:${PORT}`);
 
-    // FIX: registra i cron DOPO che il server è in ascolto
-    // così DB e services sono sicuramente pronti
     cron.schedule('*/2 * * * *', async () => {
       try { await emailService.processQueue(); }
       catch (err) { console.error('[Cron] Email queue error:', err); }
     });
 
     console.log('[Cron] Email queue worker avviato (ogni 2 min)');
+    console.log('[Cron] GDPR retention cron registrato (domenica 02:00)');
   });
 }
 
