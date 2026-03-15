@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRoute, Link } from 'wouter';
 import { CheckCircle, XCircle, Clock, Eye, ArrowLeft,
-         Upload, MessageSquare, AlertTriangle } from 'lucide-react';
+         Upload, MessageSquare, AlertTriangle, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../api/index';
 import { useAuth } from '../context/AuthContext';
@@ -23,12 +23,29 @@ export default function PracticeDetail() {
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState<string | null>(null);
 
-  const fetch = () => {
+  const refetch = () => {
     if (!params?.id) return;
     api.get<any>(`/api/practices/${params.id}`).then(setPractice).catch(console.error);
   };
 
-  useEffect(() => { fetch(); }, [params?.id]);
+  useEffect(() => { refetch(); }, [params?.id]);
+
+  const handleDocDownload = async (docId: string, filename: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/documents/${docId}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Download fallito');
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) { toast.error(err.message); }
+  };
 
   const handleReview = async (requestId: string, action: 'approve' | 'reject') => {
     if (action === 'reject' && !rejectReason.trim()) {
@@ -43,7 +60,7 @@ export default function PracticeDetail() {
       toast.success(action === 'approve' ? 'Documento approvato' : 'Documento rifiutato', { id: tid });
       setShowRejectForm(null);
       setRejectReason('');
-      fetch();
+      refetch();
     } catch (err: any) {
       toast.error(err.message, { id: tid });
     } finally { setReviewing(null); }
@@ -68,7 +85,6 @@ export default function PracticeDetail() {
         </Link>
       </div>
 
-      {/* Header pratica */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -94,7 +110,6 @@ export default function PracticeDetail() {
         </div>
       </div>
 
-      {/* Lista richieste */}
       <div className="space-y-3">
         <h3 className="font-semibold text-gray-700">Documenti richiesti</h3>
         {practice.requests?.map((req: any) => {
@@ -119,10 +134,12 @@ export default function PracticeDetail() {
 
                 <div className="flex items-center gap-2">
                   {doc && (
-                    <a href={`${API_BASE_URL}/api/documents/${doc.id}/download`}
-                      className="text-sm text-indigo-600 hover:underline flex items-center gap-1" download>
-                      📎 {doc.originalFilename}
-                    </a>
+                    <button
+                      onClick={() => handleDocDownload(doc.id, doc.originalFilename)}
+                      className="text-sm text-indigo-600 hover:underline flex items-center gap-1"
+                    >
+                      <Download className="w-3.5 h-3.5" /> {doc.originalFilename}
+                    </button>
                   )}
 
                   {canReview && user?.role !== 'client' && (
@@ -150,7 +167,6 @@ export default function PracticeDetail() {
                 </div>
               </div>
 
-              {/* Form rifiuto */}
               {showRejectForm === req.id && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -176,7 +192,6 @@ export default function PracticeDetail() {
                 </div>
               )}
 
-              {/* Motivazione rifiuto esistente */}
               {req.status === 'rejected' && req.rejectionReason && (
                 <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 flex gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -184,7 +199,6 @@ export default function PracticeDetail() {
                 </div>
               )}
 
-              {/* Commenti */}
               {req.comments?.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
                   {req.comments

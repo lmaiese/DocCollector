@@ -106,7 +106,6 @@ export default function PortalRequests() {
   );
 }
 
-// ─── RequestCard: stato commento isolato per card ─────────────────────────
 function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommentSent }: {
   req: any;
   uploading: string | null;
@@ -115,7 +114,6 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommen
   setExpanded: (id: string | null) => void;
   onCommentSent: () => void;
 }) {
-  // FIX: ogni card ha il suo stato commento — prima era condiviso nel parent
   const [comment, setComment] = useState('');
 
   const cfg    = STATUS_CONFIG[req.status as keyof typeof STATUS_CONFIG];
@@ -130,6 +128,24 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommen
       toast.success('Messaggio inviato');
       setComment('');
       onCommentSent();
+    } catch (err: any) { toast.error(err.message); }
+  };
+
+  const handleDownload = async () => {
+    if (!req.documentId) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/portal/documents/${req.documentId}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Download fallito');
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = req.documentFilename || 'documento';
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (err: any) { toast.error(err.message); }
   };
 
@@ -192,17 +208,15 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommen
             </p>
           )}
           {req.documentFilename && (
-            <p className="text-sm text-gray-600">
-              <strong>File caricato:</strong>{' '}
-              {/* FIX: usa /api/portal/documents/:id/download non /api/documents */}
-              <a
-                href={`${API_BASE_URL}/api/portal/documents/${req.documentId}/download`}
-                className="text-indigo-600 hover:underline"
-                download
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <strong>File caricato:</strong>
+              <button
+                onClick={handleDownload}
+                className="text-indigo-600 hover:underline flex items-center gap-1"
               >
-                {req.documentFilename}
-              </a>
-            </p>
+                📎 {req.documentFilename}
+              </button>
+            </div>
           )}
           <div className="flex gap-2">
             <input

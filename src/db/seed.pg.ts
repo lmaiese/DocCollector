@@ -26,36 +26,60 @@ export async function seedDb(): Promise<void> {
       name: 'Luigi Bianchi', role: 'employee' },
   ]);
 
-  await db.insert(clients).values([
-    { tenantId: tenant.id, name: 'Acme S.r.l.', internalCode: 'ACM001',
-      taxId: '12345678901', email: 'contabilita@acme.it', category: 'SRL' },
-    { tenantId: tenant.id, name: 'Beta S.p.A.', internalCode: 'BET002',
-      taxId: '98765432100', email: 'info@beta.it', category: 'SPA' },
-  ]);
+  // Clienti aziendali
+  const [acme] = await db.insert(clients).values({
+    tenantId: tenant.id, name: 'Acme S.r.l.', internalCode: 'ACM001',
+    taxId: '12345678901', email: 'contabilita@acme.it', category: 'SRL',
+  }).returning();
+
+  const [beta] = await db.insert(clients).values({
+    tenantId: tenant.id, name: 'Beta S.p.A.', internalCode: 'BET002',
+    taxId: '98765432100', email: 'info@beta.it', category: 'SPA',
+  }).returning();
+
+  // ─── Utente cliente per test portale ────────────────────────────────────
+  // Accedi con: GET /api/auth/magic-link {email: "cliente@acme.it"}
+  await db.insert(users).values({
+    tenantId: tenant.id,
+    email:    'cliente@acme.it',
+    name:     'Giuseppe Acme',
+    role:     'client',
+    clientId: acme.id,
+    isActive: true,
+  });
+
+  await db.insert(users).values({
+    tenantId: tenant.id,
+    email:    'cliente@beta.it',
+    name:     'Carla Beta',
+    role:     'client',
+    clientId: beta.id,
+    isActive: true,
+  });
 
   // Catalogo tipi documentali di sistema
   await db.insert(documentTypes).values([
-    { code: 'FATT_ATT',   label: 'Fatture Attive',              category: 'Contabile',  isSystem: true, sortOrder: 10 },
-    { code: 'FATT_PAS',   label: 'Fatture Passive',             category: 'Contabile',  isSystem: true, sortOrder: 20 },
-    { code: 'BANK',       label: 'Estratto Conto Bancario',     category: 'Contabile',  isSystem: true, sortOrder: 30 },
-    { code: 'F24',        label: 'F24 e Deleghe di Pagamento',  category: 'Fiscale',    isSystem: true, sortOrder: 40 },
-    { code: 'IVA_TRIM',   label: 'Liquidazione IVA Trimestrale',category: 'Fiscale',    isSystem: true, sortOrder: 50 },
-    { code: 'MOD_730',    label: 'Modello 730',                 category: 'Fiscale',    isSystem: true, sortOrder: 60 },
-    { code: 'REDDITI_PF', label: 'Dichiarazione Redditi PF',   category: 'Fiscale',    isSystem: true, sortOrder: 70 },
-    { code: 'REDDITI_SC', label: 'Dichiarazione Redditi SC',   category: 'Fiscale',    isSystem: true, sortOrder: 80 },
-    { code: 'IRAP',       label: 'Dichiarazione IRAP',          category: 'Fiscale',    isSystem: true, sortOrder: 90 },
-    { code: 'MOD_770',    label: 'Modello 770',                 category: 'Fiscale',    isSystem: true, sortOrder: 100 },
-    { code: 'BILANCIO',   label: 'Bilancio Civilistico',        category: 'Contabile',  isSystem: true, sortOrder: 110 },
-    { code: 'LIB_GIO',    label: 'Libro Giornale',              category: 'Contabile',  isSystem: true, sortOrder: 120 },
-    { code: 'REG_IVA',    label: 'Registro IVA',                category: 'Contabile',  isSystem: true, sortOrder: 130 },
-    { code: 'CUD',        label: 'CUD / Certificazione Unica',  category: 'Paghe',      isSystem: true, sortOrder: 140 },
-    { code: 'BUSTA_PAGA', label: 'Buste Paga',                  category: 'Paghe',      isSystem: true, sortOrder: 150 },
-    { code: 'LUL',        label: 'Libro Unico del Lavoro',      category: 'Paghe',      isSystem: true, sortOrder: 160 },
-    { code: 'VISURA',     label: 'Visura Camerale',             category: 'Societario', isSystem: true, sortOrder: 170 },
-    { code: 'STATUTO',    label: 'Statuto Societario',          category: 'Societario', isSystem: true, sortOrder: 180 },
-    { code: 'VERBALE',    label: 'Verbali CdA / Assemblea',     category: 'Societario', isSystem: true, sortOrder: 190 },
-    { code: 'CONTRATTO',  label: 'Contratti',                   category: 'Societario', isSystem: true, sortOrder: 200 },
-    { code: 'OTHER',      label: 'Altro',                       category: 'Altro',      isSystem: true, sortOrder: 999 },
+    { code: 'FATT_ATT',   label: 'Fatture Attive',               category: 'Contabile',  isSystem: true, sortOrder: 10 },
+    { code: 'FATT_PAS',   label: 'Fatture Passive',              category: 'Contabile',  isSystem: true, sortOrder: 20 },
+    { code: 'BANK',       label: 'Estratto Conto Bancario',      category: 'Contabile',  isSystem: true, sortOrder: 30 },
+    { code: 'F24',        label: 'F24 e Deleghe di Pagamento',   category: 'Fiscale',    isSystem: true, sortOrder: 40 },
+    { code: 'IVA_TRIM',   label: 'Liquidazione IVA Trimestrale', category: 'Fiscale',    isSystem: true, sortOrder: 50 },
+    { code: 'MOD_730',    label: 'Modello 730',                  category: 'Fiscale',    isSystem: true, sortOrder: 60 },
+    { code: 'REDDITI_PF', label: 'Dichiarazione Redditi PF',    category: 'Fiscale',    isSystem: true, sortOrder: 70 },
+    { code: 'REDDITI_SC', label: 'Dichiarazione Redditi SC',    category: 'Fiscale',    isSystem: true, sortOrder: 80 },
+    { code: 'IRAP',       label: 'Dichiarazione IRAP',           category: 'Fiscale',    isSystem: true, sortOrder: 90 },
+    { code: 'MOD_770',    label: 'Modello 770',                  category: 'Fiscale',    isSystem: true, sortOrder: 100 },
+    { code: 'BILANCIO',   label: 'Bilancio Civilistico',         category: 'Contabile',  isSystem: true, sortOrder: 110 },
+    { code: 'LIB_GIO',    label: 'Libro Giornale',               category: 'Contabile',  isSystem: true, sortOrder: 120 },
+    { code: 'REG_IVA',    label: 'Registro IVA',                 category: 'Contabile',  isSystem: true, sortOrder: 130 },
+    { code: 'CUD',        label: 'CUD / Certificazione Unica',   category: 'Paghe',      isSystem: true, sortOrder: 140 },
+    { code: 'BUSTA_PAGA', label: 'Buste Paga',                   category: 'Paghe',      isSystem: true, sortOrder: 150 },
+    { code: 'LUL',        label: 'Libro Unico del Lavoro',       category: 'Paghe',      isSystem: true, sortOrder: 160 },
+    { code: 'VISURA',     label: 'Visura Camerale',              category: 'Societario', isSystem: true, sortOrder: 170 },
+    { code: 'STATUTO',    label: 'Statuto Societario',           category: 'Societario', isSystem: true, sortOrder: 180 },
+    { code: 'VERBALE',    label: 'Verbali CdA / Assemblea',      category: 'Societario', isSystem: true, sortOrder: 190 },
+    { code: 'CONTRATTO',  label: 'Contratti',                    category: 'Societario', isSystem: true, sortOrder: 200 },
+    { code: 'OTHER',      label: 'Altro',                        category: 'Altro',      isSystem: true, sortOrder: 999 },
   ]);
 
   // Template di sistema
@@ -86,12 +110,13 @@ export async function seedDb(): Promise<void> {
       description: 'Documenti iniziali per ogni nuovo cliente',
       isSystem: true,
       items: [
-        { docTypeCode: 'VISURA',   deadlineDaysOffset: 7 },
-        { docTypeCode: 'STATUTO',  deadlineDaysOffset: 7 },
-        { docTypeCode: 'CONTRATTO',deadlineDaysOffset: 14 },
+        { docTypeCode: 'VISURA',    deadlineDaysOffset: 7 },
+        { docTypeCode: 'STATUTO',   deadlineDaysOffset: 7 },
+        { docTypeCode: 'CONTRATTO', deadlineDaysOffset: 14 },
       ],
     },
   ]);
 
   console.log('[DB] Seeding complete.');
+  console.log('[DB] Test client portal: email cliente@acme.it → POST /api/auth/magic-link');
 }

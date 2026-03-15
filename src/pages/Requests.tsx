@@ -23,6 +23,23 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }>
   rejected:     { label: 'Rifiutato',    color: 'text-red-600 bg-red-50 border-red-200',          icon: XCircle },
 };
 
+const handleDownload = async (docId: string, filename?: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/documents/${docId}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Download fallito');
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = filename || 'documento';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) { toast.error(err.message); }
+  };
+
 interface ExtendedRequest extends Request {
   docTypeLabel?:    string;
   docTypeCode?:     string;
@@ -379,54 +396,26 @@ export default function Requests() {
                         <div className="flex items-center gap-2 flex-wrap">
 
                           {/* Download documento approvato */}
-                          {req.status === 'approved' && req.documentId && (
-                            <a
-                              href={`${API_BASE_URL}/api/documents/${req.documentId}/download`}
-                              className="text-indigo-600 hover:text-indigo-800 flex items-center
-                                         gap-1 font-medium text-xs"
-                              download
-                            >
-                              <Download className="w-3.5 h-3.5" /> Scarica
-                            </a>
-                          )}
+{req.status === 'approved' && req.documentId && (
+  <button
+    onClick={() => handleDownload(req.documentId!, req.documentFilename || undefined)}
+    className="text-indigo-600 hover:text-indigo-800 flex items-center
+               gap-1 font-medium text-xs"
+  >
+    <Download className="w-3.5 h-3.5" /> Scarica
+  </button>
+)}
 
-                          {/* Download + bottoni revisione per uploaded/under_review */}
-                          {canReviewReq && (
-                            <>
-                              {req.documentId && (
-                                <a
-                                  href={`${API_BASE_URL}/api/documents/${req.documentId}/download`}
-                                  className="text-gray-500 hover:text-indigo-600 flex items-center
-                                             gap-1 text-xs"
-                                  download
-                                  title="Scarica per revisione"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                </a>
-                              )}
-                              <button
-                                disabled={!!reviewing}
-                                onClick={() => handleReview(req.id, 'approve')}
-                                className="flex items-center gap-1 bg-green-50 text-green-700
-                                           border border-green-200 px-2 py-1 rounded-lg text-xs
-                                           font-medium hover:bg-green-100 disabled:opacity-50"
-                              >
-                                <CheckCircle className="w-3 h-3" /> Approva
-                              </button>
-                              <button
-                                disabled={!!reviewing}
-                                onClick={() => {
-                                  setRejectTarget(rejectTarget === req.id ? null : req.id);
-                                  setRejectReason('');
-                                }}
-                                className="flex items-center gap-1 bg-red-50 text-red-700
-                                           border border-red-200 px-2 py-1 rounded-lg text-xs
-                                           font-medium hover:bg-red-100 disabled:opacity-50"
-                              >
-                                <XCircle className="w-3 h-3" /> Rifiuta
-                              </button>
-                            </>
-                          )}
+{/* Download per revisione */}
+{canReviewReq && req.documentId && (
+  <button
+    onClick={() => handleDownload(req.documentId!, req.documentFilename || undefined)}
+    className="text-gray-500 hover:text-indigo-600 flex items-center gap-1 text-xs"
+    title="Scarica per revisione"
+  >
+    <Download className="w-3.5 h-3.5" />
+  </button>
+)}
 
                           {/* Upload (pending o rejected) */}
                           {canUpload && (
