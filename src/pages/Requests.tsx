@@ -24,21 +24,21 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }>
 };
 
 const handleDownload = async (docId: string, filename?: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/documents/${docId}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Download fallito');
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = filename || 'documento';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err: any) { toast.error(err.message); }
-  };
+  try {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${API_BASE_URL}/api/documents/${docId}/download`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('Download fallito');
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = filename || 'documento';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err: any) { toast.error(err.message); }
+};
 
 interface ExtendedRequest extends Request {
   docTypeLabel?:    string;
@@ -141,7 +141,10 @@ export default function Requests() {
         action,
         rejection_reason: reason || '',
       });
-      toast.success(action === 'approve' ? '✅ Documento approvato' : '❌ Documento rifiutato', { id: tid });
+      toast.success(
+        action === 'approve' ? '✅ Documento approvato' : '❌ Documento rifiutato',
+        { id: tid },
+      );
       setRejectTarget(null);
       setRejectReason('');
       fetchRequests();
@@ -235,7 +238,7 @@ export default function Requests() {
           </div>
           {activeFilterCount > 0 && (
             <button
-              onClick={() => setFilters({ search:'', status:'', doc_type_code:'', client_id:'' })}
+              onClick={() => setFilters({ search: '', status: '', doc_type_code: '', client_id: '' })}
               className="mt-2 text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
             >
               <X className="w-3 h-3" /> Rimuovi tutti i filtri
@@ -349,13 +352,14 @@ export default function Requests() {
                 const cfg  = STATUS_CONFIG[req.status] || STATUS_CONFIG.pending;
                 const Icon = cfg.icon;
                 const canUpload    = ['pending', 'rejected'].includes(req.status);
-                const canReviewReq = canReview && ['uploaded','under_review'].includes(req.status);
+                const canReviewReq = canReview && ['uploaded', 'under_review'].includes(req.status);
 
                 return (
                   <React.Fragment key={req.id}>
                     <tr className={`border-b border-gray-100 hover:bg-gray-50 ${
                       req.status === 'rejected' ? 'bg-red-50/30' : ''
                     }`}>
+
                       {/* Cliente */}
                       <td className="p-4 font-medium text-gray-900">
                         {req.clientName}
@@ -391,31 +395,50 @@ export default function Requests() {
                         </span>
                       </td>
 
-                      {/* Azioni */}
+                      {/* ── Azioni ── */}
                       <td className="p-4">
                         <div className="flex items-center gap-2 flex-wrap">
 
-                          {/* Download documento approvato */}
-{req.status === 'approved' && req.documentId && (
-  <button
-    onClick={() => handleDownload(req.documentId!, req.documentFilename || undefined)}
-    className="text-indigo-600 hover:text-indigo-800 flex items-center
-               gap-1 font-medium text-xs"
-  >
-    <Download className="w-3.5 h-3.5" /> Scarica
-  </button>
-)}
+                          {/* Download documento (qualsiasi stato con doc allegato) */}
+                          {req.documentId && (
+                            <button
+                              onClick={() => handleDownload(req.documentId!, req.documentFilename || undefined)}
+                              className="text-gray-400 hover:text-indigo-600 transition-colors"
+                              title="Scarica documento"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
-{/* Download per revisione */}
-{canReviewReq && req.documentId && (
-  <button
-    onClick={() => handleDownload(req.documentId!, req.documentFilename || undefined)}
-    className="text-gray-500 hover:text-indigo-600 flex items-center gap-1 text-xs"
-    title="Scarica per revisione"
-  >
-    <Download className="w-3.5 h-3.5" />
-  </button>
-)}
+                          {/* Approva / Rifiuta — solo staff, solo uploaded/under_review */}
+                          {canReviewReq && (
+                            <>
+                              <button
+                                disabled={!!reviewing}
+                                onClick={() => handleReview(req.id, 'approve')}
+                                className="flex items-center gap-1 bg-green-50 text-green-700
+                                           border border-green-200 px-2 py-1 rounded-lg text-xs
+                                           font-medium hover:bg-green-100 disabled:opacity-50
+                                           transition-colors"
+                                title="Approva documento"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> Approva
+                              </button>
+                              <button
+                                disabled={!!reviewing}
+                                onClick={() => setRejectTarget(
+                                  rejectTarget === req.id ? null : req.id,
+                                )}
+                                className="flex items-center gap-1 bg-red-50 text-red-700
+                                           border border-red-200 px-2 py-1 rounded-lg text-xs
+                                           font-medium hover:bg-red-100 disabled:opacity-50
+                                           transition-colors"
+                                title="Rifiuta documento"
+                              >
+                                <XCircle className="w-3.5 h-3.5" /> Rifiuta
+                              </button>
+                            </>
+                          )}
 
                           {/* Upload (pending o rejected) */}
                           {canUpload && (
@@ -437,8 +460,8 @@ export default function Requests() {
                             </label>
                           )}
 
-                          {/* Elimina documento (uploaded/under_review) */}
-                          {['uploaded','under_review'].includes(req.status) && req.documentId && canReview && (
+                          {/* Elimina documento (staff, solo uploaded/under_review) */}
+                          {['uploaded', 'under_review'].includes(req.status) && req.documentId && canReview && (
                             <button
                               onClick={() => handleDeleteDocument(req.documentId!)}
                               className="text-gray-400 hover:text-red-600 transition-colors"
@@ -458,11 +481,12 @@ export default function Requests() {
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
+
                         </div>
                       </td>
                     </tr>
 
-                    {/* ── Riga rifiuto (inline form) ── */}
+                    {/* ── Riga form rifiuto (inline, sotto la riga) ── */}
                     {rejectTarget === req.id && (
                       <tr className="bg-red-50 border-b border-red-100">
                         <td colSpan={6} className="px-4 py-3">
@@ -481,8 +505,8 @@ export default function Requests() {
                                 if (e.key === 'Escape') { setRejectTarget(null); setRejectReason(''); }
                               }}
                               placeholder="es. File illeggibile, mancano pagine..."
-                              className="flex-1 border border-red-300 rounded-lg px-3 py-1.5 text-sm
-                                         focus:ring-2 focus:ring-red-400 outline-none"
+                              className="flex-1 border border-red-300 rounded-lg px-3 py-1.5
+                                         text-sm focus:ring-2 focus:ring-red-400 outline-none"
                             />
                             <button
                               onClick={() => handleReview(req.id, 'reject', rejectReason)}
@@ -514,6 +538,7 @@ export default function Requests() {
                         </td>
                       </tr>
                     )}
+
                   </React.Fragment>
                 );
               })}

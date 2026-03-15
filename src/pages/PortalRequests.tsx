@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Upload, CheckCircle, Clock, AlertTriangle,
-  XCircle, Eye, MessageSquare, ChevronDown, ChevronUp,
+  XCircle, Eye, MessageSquare, ChevronDown, ChevronUp, Download,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../api/index';
@@ -14,7 +14,7 @@ const STATUS_CONFIG = {
   under_review: { label: 'In revisione',  icon: Eye,         color: 'text-purple-600 bg-purple-50' },
   approved:     { label: 'Approvato',     icon: CheckCircle, color: 'text-green-600 bg-green-50' },
   rejected:     { label: 'Da ricaricare', icon: XCircle,     color: 'text-red-600 bg-red-50' },
-};
+} as const;
 
 export default function PortalRequests() {
   const [requests, setRequests]   = useState<any[]>([]);
@@ -64,7 +64,7 @@ export default function PortalRequests() {
       {pending.length > 0 && (
         <section>
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            ⚠️ Azione richiesta ({pending.length})
+            Azione richiesta ({pending.length})
           </h3>
           <div className="space-y-3">
             {pending.map(req => (
@@ -106,6 +106,7 @@ export default function PortalRequests() {
   );
 }
 
+// ─── RequestCard (useState ora importato correttamente nel file) ────────────
 function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommentSent }: {
   req: any;
   uploading: string | null;
@@ -115,11 +116,29 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommen
   onCommentSent: () => void;
 }) {
   const [comment, setComment] = useState('');
+  const [comments, setComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
 
-  const cfg    = STATUS_CONFIG[req.status as keyof typeof STATUS_CONFIG];
+  const cfg    = STATUS_CONFIG[req.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending;
   const Icon   = cfg.icon;
   const isOpen = expanded === req.id;
   const canUpload = ['pending', 'rejected'].includes(req.status);
+
+  const loadComments = async () => {
+    if (comments.length > 0) return;
+    setLoadingComments(true);
+    try {
+      const data = await api.get<any[]>(`/api/requests/${req.id}/comments`);
+      setComments(data.filter((c: any) => c.visibleToClient));
+    } catch { /* commenti non critici */ }
+    finally { setLoadingComments(false); }
+  };
+
+  const handleToggle = () => {
+    const next = isOpen ? null : req.id;
+    setExpanded(next);
+    if (next) loadComments();
+  };
 
   const handleComment = async () => {
     if (!comment.trim()) return;
@@ -127,6 +146,7 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommen
       await api.post(`/api/portal/requests/${req.id}/comments`, { body: comment });
       toast.success('Messaggio inviato');
       setComment('');
+      setComments([]);
       onCommentSent();
     } catch (err: any) { toast.error(err.message); }
   };
@@ -192,7 +212,14 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommen
                   onChange={e => e.target.files?.[0] && onUpload(req.id, e.target.files[0])} />
               </label>
             )}
-            <button onClick={() => setExpanded(isOpen ? null : req.id)}
+            {req.documentId && req.status !== 'rejected' && (
+              <button onClick={handleDownload}
+                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                title="Scarica documento">
+                <Download className="w-4 h-4" />
+              </button>
+            )}
+            <button onClick={handleToggle}
               className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
               {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
@@ -201,23 +228,33 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommen
       </div>
 
       {isOpen && (
-        <div className="border-t border-gray-100 p-5 bg-gray-50 rounded-b-xl space-y-3">
+        <div className="border-t border-gray-100 p-5 bg-gray-50 rounded-b-xl space-y-4">
           {req.notes && (
             <p className="text-sm text-gray-600">
               <strong>Note dello studio:</strong> {req.notes}
             </p>
           )}
-          {req.documentFilename && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <strong>File caricato:</strong>
-              <button
-                onClick={handleDownload}
-                className="text-indigo-600 hover:underline flex items-center gap-1"
-              >
-                📎 {req.documentFilename}
-              </button>
+
+          {/* Commenti caricati */}
+          {loadingComments && (
+            <p className="text-xs text-gray-400">Caricamento messaggi...</p>
+          )}
+          {comments.length > 0 && (
+            <div className="space-y-2">
+              {comments.map((c: any) => (
+                <div key={c.id} className={`text-sm p-2 rounded-lg ${
+                  c.authorRole === 'client'
+                    ? 'bg-indigo-50 text-indigo-900 ml-8'
+                    : 'bg-white border border-gray-200 text-gray-700'
+                }`}>
+                  <span className="font-medium">{c.authorRole === 'client' ? 'Tu' : c.authorName}:</span>{' '}
+                  {c.body}
+                </div>
+              ))}
             </div>
           )}
+
+          {/* Input commento */}
           <div className="flex gap-2">
             <input
               type="text"

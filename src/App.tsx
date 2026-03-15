@@ -1,4 +1,3 @@
-// src/App.tsx
 import React, { useEffect, useState } from 'react';
 import { Route, Switch, useLocation } from 'wouter';
 import { Toaster } from 'react-hot-toast';
@@ -18,9 +17,10 @@ import Users           from './pages/Users';
 import PortalLayout    from './pages/PortalLayout';
 import PortalDashboard from './pages/PortalDashboard';
 import PortalRequests  from './pages/PortalRequests';
+import PortalPractices from './pages/PortalPractices';
+import PortalDocuments from './pages/PortalDocuments';
 import { API_BASE_URL } from './config';
 
-// Schermo di caricamento riutilizzabile
 function Spinner() {
   return (
     <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -32,7 +32,6 @@ function Spinner() {
 function AppContent() {
   const { user, login, logout, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
-  // FIX: stato separato per il verify del magic link
   const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
@@ -47,7 +46,6 @@ function AppContent() {
       return;
     }
 
-    // FIX: imposta verifying PRIMA del fetch per bloccare il render di ClientLogin
     setVerifying(true);
 
     fetch(`${API_BASE_URL}/api/auth/verify-token?token=${encodeURIComponent(token)}`)
@@ -55,7 +53,6 @@ function AppContent() {
       .then(data => {
         if (data.token && data.user) {
           login(data.user, data.token, next);
-          // Pulisce l'URL dal token per sicurezza
           window.history.replaceState({}, '', next);
         } else {
           setLocation('/portale/login?error=invalid_token');
@@ -69,14 +66,9 @@ function AppContent() {
 
   // ── Route portale cliente ──────────────────────────────────────────────
   if (location.startsWith('/portale')) {
-    // FIX: /portale/accesso è gestito dall'useEffect sopra — mostra solo spinner
-    if (location.startsWith('/portale/accesso')) {
-      return <Spinner />;
-    }
+    if (location.startsWith('/portale/accesso')) return <Spinner />;
 
-    if (!user || user.role !== 'client') {
-      return <ClientLogin />;
-    }
+    if (!user || user.role !== 'client') return <ClientLogin />;
 
     return (
       <PortalLayout user={user} onLogout={logout}>
@@ -84,6 +76,8 @@ function AppContent() {
         <Switch>
           <Route path="/portale"           component={() => <PortalDashboard user={user} />} />
           <Route path="/portale/richieste" component={PortalRequests} />
+          <Route path="/portale/pratiche"  component={PortalPractices} />
+          <Route path="/portale/ricevuti"  component={PortalDocuments} />
           <Route>
             <div className="flex items-center justify-center h-64">
               <p className="text-gray-400">Pagina non trovata</p>

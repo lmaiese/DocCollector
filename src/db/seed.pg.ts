@@ -1,5 +1,9 @@
 import { db } from './index.pg.ts';
-import { tenants, users, clients, documentTypes, requestTemplates } from './schema.pg.ts';
+import {
+  tenants, users, clients, documentTypes,
+  requestTemplates, requests, practices,
+} from './schema.pg.ts';
+import { eq } from 'drizzle-orm';
 
 export async function seedDb(): Promise<void> {
   const existing = await db.select().from(tenants).limit(1);
@@ -26,7 +30,7 @@ export async function seedDb(): Promise<void> {
       name: 'Luigi Bianchi', role: 'employee' },
   ]);
 
-  // Clienti aziendali
+  // Clienti
   const [acme] = await db.insert(clients).values({
     tenantId: tenant.id, name: 'Acme S.r.l.', internalCode: 'ACM001',
     taxId: '12345678901', email: 'contabilita@acme.it', category: 'SRL',
@@ -37,25 +41,24 @@ export async function seedDb(): Promise<void> {
     taxId: '98765432100', email: 'info@beta.it', category: 'SPA',
   }).returning();
 
-  // ─── Utente cliente per test portale ────────────────────────────────────
-  // Accedi con: GET /api/auth/magic-link {email: "cliente@acme.it"}
-  await db.insert(users).values({
+  // Utenti cliente per test portale
+  const [clientUserAcme] = await db.insert(users).values({
     tenantId: tenant.id,
     email:    'cliente@acme.it',
     name:     'Giuseppe Acme',
     role:     'client',
     clientId: acme.id,
     isActive: true,
-  });
+  }).returning();
 
-  await db.insert(users).values({
+  const [clientUserBeta] = await db.insert(users).values({
     tenantId: tenant.id,
     email:    'cliente@beta.it',
     name:     'Carla Beta',
     role:     'client',
     clientId: beta.id,
     isActive: true,
-  });
+  }).returning();
 
   // Catalogo tipi documentali di sistema
   await db.insert(documentTypes).values([
@@ -117,6 +120,101 @@ export async function seedDb(): Promise<void> {
     },
   ]);
 
+  // ─── PRATICHE E RICHIESTE DEMO ────────────────────────────────────────────
+  // Necessarie per testare il portale cliente senza dover creare dati manualmente
+
+  const today      = new Date();
+  const in7days    = new Date(today); in7days.setDate(today.getDate() + 7);
+  const in3days    = new Date(today); in3days.setDate(today.getDate() + 3);
+  const yesterday  = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const lastMonth  = new Date(today); lastMonth.setDate(today.getDate() - 30);
+
+  const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+  // Pratica demo per Acme
+  const [practiceAcme] = await db.insert(practices).values({
+    tenantId:        tenant.id,
+    clientId:        acme.id,
+    title:           'Dichiarazione IVA Marzo 2025',
+    type:            'iva_mensile',
+    fiscalYear:      2025,
+    status:          'open',
+    deadline:        formatDate(in7days),
+    visibleToClient: true,
+    createdBy:       admin.id,
+  }).returning();
+
+  // Richieste demo collegate alla pratica Acme
+  await db.insert(requests).values([
+    {
+      tenantId:    tenant.id,
+      clientId:    acme.id,
+      practiceId:  practiceAcme.id,
+      docTypeCode: 'FATT_ATT',
+      period:      '202503',
+      status:      'pending',
+      deadline:    formatDate(in7days),
+      notes:       'Includere tutte le fatture elettroniche del mese',
+      createdBy:   admin.id,
+    },
+    {
+      tenantId:    tenant.id,
+      clientId:    acme.id,
+      practiceId:  practiceAcme.id,
+      docTypeCode: 'FATT_PAS',
+      period:      '202503',
+      status:      'pending',
+      deadline:    formatDate(in3days),
+      createdBy:   admin.id,
+    },
+    {
+      tenantId:    tenant.id,
+      clientId:    acme.id,
+      practiceId:  practiceAcme.id,
+      docTypeCode: 'BANK',
+      period:      '202503',
+      status:      'pending',
+      deadline:    formatDate(yesterday),
+      notes:       'Estratto conto di marzo — URGENTE',
+      createdBy:   admin.id,
+    },
+  ]);
+
+  // Richiesta scaduta senza pratica (per testare il badge scaduto)
+  await db.insert(requests).values({
+    tenantId:    tenant.id,
+    clientId:    acme.id,
+    docTypeCode: 'F24',
+    period:      '202502',
+    status:      'pending',
+    deadline:    formatDate(lastMonth),
+    notes:       'F24 febbraio — in ritardo',
+    createdBy:   admin.id,
+  });
+
+  // Richiesta per Beta (senza pratica)
+  await db.insert(requests).values([
+    {
+      tenantId:    tenant.id,
+      clientId:    beta.id,
+      docTypeCode: 'BILANCIO',
+      period:      '202412',
+      status:      'pending',
+      deadline:    formatDate(in7days),
+      createdBy:   admin.id,
+    },
+    {
+      tenantId:    tenant.id,
+      clientId:    beta.id,
+      docTypeCode: 'REDDITI_SC',
+      period:      '202412',
+      status:      'pending',
+      deadline:    formatDate(in7days),
+      createdBy:   admin.id,
+    },
+  ]);
+
   console.log('[DB] Seeding complete.');
-  console.log('[DB] Test client portal: email cliente@acme.it → POST /api/auth/magic-link');
+  console.log('[DB] Staff:   admin@studiodemo.com | dipendente@studiodemo.com');
+  console.log('[DB] Portale: cliente@acme.it | cliente@beta.it → POST /api/auth/magic-link');
 }

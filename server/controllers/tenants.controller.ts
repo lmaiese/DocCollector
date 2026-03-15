@@ -25,7 +25,7 @@ export const createTenant = async (req: AuthRequest, res: Response): Promise<voi
 
   const [tenant] = await db.insert(tenants).values({
     name,
-    slug: `${slug}-${Date.now()}`, // suffisso per garantire unicità
+    slug: `${slug}-${Date.now()}`,
   }).returning();
 
   const [admin] = await db.insert(users).values({
@@ -42,4 +42,46 @@ export const createTenant = async (req: AuthRequest, res: Response): Promise<voi
     name:       tenant.name,
     adminEmail: admin.email,
   });
+};
+
+// Aggiorna impostazioni del proprio tenant (solo admin)
+export const updateTenant = async (req: AuthRequest, res: Response): Promise<void> => {
+  const tenantId = req.params.id || req.user.tenantId;
+
+  // Un admin può aggiornare solo il suo tenant; il superadmin può aggiornare qualsiasi tenant
+  if (req.user.role !== 'superadmin' && tenantId !== req.user.tenantId) {
+    res.status(403).json({ error: 'Non autorizzato' }); return;
+  }
+
+  const existing = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
+  if (!existing) { res.status(404).json({ error: 'Tenant non trovato' }); return; }
+
+  const {
+    name, logoUrl, primaryColor,
+    emailFrom, emailSignature, retentionYears,
+  } = req.body;
+
+  await db.update(tenants).set({
+    name:           name           ?? existing.name,
+    logoUrl:        logoUrl        ?? existing.logoUrl,
+    primaryColor:   primaryColor   ?? existing.primaryColor,
+    emailFrom:      emailFrom      ?? existing.emailFrom,
+    emailSignature: emailSignature ?? existing.emailSignature,
+    retentionYears: retentionYears ?? existing.retentionYears,
+    updatedAt:      new Date(),
+  }).where(eq(tenants.id, tenantId));
+
+  await logAudit(req.user.tenantId, req.user.id, 'UPDATE_TENANT',
+    `Aggiornato tenant ${tenantId}`);
+
+  res.json({ success: true });
+};
+
+// Restituisce il tenant corrente dell'utente autenticato
+export const getMyTenant = async (req: AuthRequest, res: Response): Promise<void> => {
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.id, req.user.tenantId),
+  });
+  if (!tenant) { res.status(404).json({ error: 'Tenant non trovato' }); return; }
+  res.json(tenant);
 };
