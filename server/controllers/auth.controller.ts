@@ -1,7 +1,8 @@
 // server/controllers/auth.controller.ts
+// SOSTITUISCI l'intero file
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and, gt, lt } from 'drizzle-orm';
+import { eq, and, gt, isNull } from 'drizzle-orm';
 import db from '../../src/db/index.pg.ts';
 import {
   users, tenants, clients, clientTokens,
@@ -59,12 +60,12 @@ export const requestMagicLink = async (req: Request, res: Response): Promise<voi
     ? await db.query.clients.findFirst({ where: eq(clients.id, user.clientId) })
     : null;
 
-  // FIX: invalida tutti i token precedenti non ancora usati dello stesso utente
+  // FIX: usa isNull() invece di eq(..., null as any) per generare IS NULL corretto
   await db.update(clientTokens)
     .set({ usedAt: new Date() })
     .where(and(
       eq(clientTokens.userId, user.id),
-      eq(clientTokens.usedAt, null as any),
+      isNull(clientTokens.usedAt),
     ));
 
   const token     = uuidv4();
@@ -96,19 +97,17 @@ export const verifyMagicLink = async (req: Request, res: Response): Promise<void
   const { token } = req.query as { token: string };
   if (!token) { res.status(400).json({ error: 'Token mancante' }); return; }
 
+  // FIX: aggiunto isNull(clientTokens.usedAt) nella query per evitare di caricare token già usati
   const record = await db.query.clientTokens.findFirst({
     where: and(
       eq(clientTokens.token, token),
       gt(clientTokens.expiresAt, new Date()),
+      isNull(clientTokens.usedAt),
     ),
   });
 
   if (!record) {
     res.status(401).json({ error: 'Link scaduto o non valido. Richiedi un nuovo accesso.' });
-    return;
-  }
-  if (record.usedAt) {
-    res.status(401).json({ error: 'Link già utilizzato. Richiedi un nuovo accesso.' });
     return;
   }
 

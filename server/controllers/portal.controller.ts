@@ -58,6 +58,8 @@ export const getPortalDashboard = async (req: AuthRequest, res: Response): Promi
 };
 
 // ─── Lista richieste del cliente ───────────────────────────────────────────
+// Sostituisci SOLO la funzione getPortalRequests in server/controllers/portal.controller.ts
+
 export const getPortalRequests = async (req: AuthRequest, res: Response): Promise<void> => {
   const clientId = req.user.clientId;
   if (!clientId) { res.status(403).json({ error: 'Nessun cliente associato' }); return; }
@@ -67,6 +69,7 @@ export const getPortalRequests = async (req: AuthRequest, res: Response): Promis
   if (status)      conditions.push(eq(requests.status, status as any));
   if (practice_id) conditions.push(eq(requests.practiceId, practice_id as string));
 
+  // Step 1: carica richieste con tipo documento (no join documenti)
   const rows = await db
     .select({
       id:              requests.id,
@@ -81,22 +84,54 @@ export const getPortalRequests = async (req: AuthRequest, res: Response): Promis
       updatedAt:       requests.updatedAt,
       docTypeLabel:    documentTypes.label,
       docTypeCategory: documentTypes.category,
-      documentId:       documents.id,
-      documentFilename: documents.originalFilename,
-      documentCreatedAt: documents.createdAt,
     })
     .from(requests)
-    .leftJoin(documentTypes,
+    .leftJoin(
+      documentTypes,
       and(
         eq(documentTypes.code, requests.docTypeCode),
-        or(isNull(documentTypes.tenantId), eq(documentTypes.tenantId, req.user.tenantId))
-      )
+        or(isNull(documentTypes.tenantId), eq(documentTypes.tenantId, req.user.tenantId)),
+      ),
     )
-    .leftJoin(documents, eq(documents.requestId, requests.id))
     .where(and(...conditions))
     .orderBy(desc(requests.createdAt));
 
-  res.json(rows);
+  if (rows.length === 0) { res.json([]); return; }
+
+  // Step 2: carica l'ultimo documento per ogni richiesta (DISTINCT ON per PG)
+  // Usiamo una raw query per DISTINCT ON che Drizzle non supporta direttamente
+  const requestIds = rows.map(r => r.id);
+
+  // Subquery: per ogni request_id prendi il documento più recente
+  const docsResult = await db.execute(`
+    SELECT DISTINCT ON (request_id)
+      id            AS "documentId",
+      request_id    AS "requestId",
+      original_filename AS "documentFilename",
+      created_at    AS "documentCreatedAt"
+    FROM documents
+    WHERE request_id = ANY($1::uuid[])
+      AND direction = 'client_to_studio'
+    ORDER BY request_id, created_at DESC
+  `, [requestIds]);
+
+  // Mappa requestId → documento
+  const docMap = new Map<string, { documentId: string; documentFilename: string }>();
+  for (const doc of docsResult.rows as any[]) {
+    docMap.set(doc.requestId, {
+      documentId:       doc.documentId,
+      documentFilename: doc.documentFilename,
+    });
+  }
+
+  // Step 3: merge
+  const result = rows.map(r => ({
+    ...r,
+    documentId:       docMap.get(r.id)?.documentId       ?? null,
+    documentFilename: docMap.get(r.id)?.documentFilename ?? null,
+  }));
+
+  res.json(result);
 };
 
 // ─── Upload documento (lato cliente) ──────────────────────────────────────

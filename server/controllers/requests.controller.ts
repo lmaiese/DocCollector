@@ -11,6 +11,8 @@ import { logAudit } from '../services/audit.service.ts';
 import { emailService } from '../services/email/email.service.ts';
 import { templates } from '../services/email/templates.ts';
 
+// Sostituisci SOLO la funzione getRequests in server/controllers/requests.controller.ts
+
 export const getRequests = async (req: AuthRequest, res: Response): Promise<void> => {
   const { status, client_id, period, search } = req.query;
   const conditions: any[] = [eq(requests.tenantId, req.user.tenantId)];
@@ -18,34 +20,68 @@ export const getRequests = async (req: AuthRequest, res: Response): Promise<void
   if (client_id) conditions.push(eq(requests.clientId, client_id as string));
   if (period)    conditions.push(ilike(requests.period, `%${period}%`));
 
+  // Step 1: richieste + clienti + tipi documento (senza documenti)
   const rows = await db
     .select({
-      id: requests.id, docTypeCode: requests.docTypeCode,
-      period: requests.period, status: requests.status,
-      deadline: requests.deadline, notes: requests.notes,
+      id:              requests.id,
+      docTypeCode:     requests.docTypeCode,
+      period:          requests.period,
+      status:          requests.status,
+      deadline:        requests.deadline,
+      notes:           requests.notes,
       rejectionReason: requests.rejectionReason,
-      practiceId: requests.practiceId, campaignId: requests.campaignId,
-      createdAt: requests.createdAt, updatedAt: requests.updatedAt,
-      clientId: requests.clientId, clientName: clients.name,
-      docTypeLabel: documentTypes.label,
-      documentId: documents.id, documentFilename: documents.originalFilename,
+      practiceId:      requests.practiceId,
+      campaignId:      requests.campaignId,
+      createdAt:       requests.createdAt,
+      updatedAt:       requests.updatedAt,
+      clientId:        requests.clientId,
+      clientName:      clients.name,
+      docTypeLabel:    documentTypes.label,
     })
     .from(requests)
     .innerJoin(clients, eq(clients.id, requests.clientId))
-    .leftJoin(documentTypes,
-  and(
-    eq(documentTypes.code, requests.docTypeCode),
-    or(
-      isNull(documentTypes.tenantId),
-      eq(documentTypes.tenantId, req.user.tenantId),
+    .leftJoin(
+      documentTypes,
+      and(
+        eq(documentTypes.code, requests.docTypeCode),
+        or(isNull(documentTypes.tenantId), eq(documentTypes.tenantId, req.user.tenantId)),
+      ),
     )
-  )
-)
-    .leftJoin(documents, eq(documents.requestId, requests.id))
     .where(and(...conditions))
     .orderBy(desc(requests.createdAt));
 
-  res.json(rows);
+  if (rows.length === 0) { res.json([]); return; }
+
+  // Step 2: ultimo documento per ogni richiesta (DISTINCT ON)
+  const requestIds = rows.map(r => r.id);
+
+  const docsResult = await db.execute(`
+    SELECT DISTINCT ON (request_id)
+      id                AS "documentId",
+      request_id        AS "requestId",
+      original_filename AS "documentFilename"
+    FROM documents
+    WHERE request_id = ANY($1::uuid[])
+      AND direction = 'client_to_studio'
+    ORDER BY request_id, created_at DESC
+  `, [requestIds]);
+
+  const docMap = new Map<string, { documentId: string; documentFilename: string }>();
+  for (const doc of docsResult.rows as any[]) {
+    docMap.set(doc.requestId, {
+      documentId:       doc.documentId,
+      documentFilename: doc.documentFilename,
+    });
+  }
+
+  // Step 3: merge
+  const result = rows.map(r => ({
+    ...r,
+    documentId:       docMap.get(r.id)?.documentId       ?? null,
+    documentFilename: docMap.get(r.id)?.documentFilename ?? null,
+  }));
+
+  res.json(result);
 };
 
 // Dentro server/controllers/requests.controller.ts
