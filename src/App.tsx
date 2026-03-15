@@ -22,26 +22,35 @@ function AppContent() {
   const { user, login, logout, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
 
-  // Gestisce il redirect post-magic-link
+  // ── Gestisce il redirect post-magic-link ───────────────────────────────
+  // FIX: legge i query params direttamente da window.location (wouter non li espone),
+  // poi pulisce l'URL per evitare che il token resti visibile nella barra
   useEffect(() => {
     if (!location.startsWith('/portale/accesso')) return;
-    const params = new URLSearchParams(window.location.search);
-    const token  = params.get('token');
-    const next   = params.get('next') || '/portale';
-    if (!token) return;
 
-    fetch(`${API_BASE_URL}/api/auth/verify-token?token=${token}`)
+    const params  = new URLSearchParams(window.location.search);
+    const token   = params.get('token');
+    // FIX: default su /portale, non su una stringa vuota
+    const next    = params.get('next') || '/portale';
+
+    if (!token) {
+      setLocation('/portale/login?error=no_token');
+      return;
+    }
+
+    fetch(`${API_BASE_URL}/api/auth/verify-token?token=${encodeURIComponent(token)}`)
       .then(r => r.json())
       .then(data => {
         if (data.token && data.user) {
-          login(data.user, data.token);
-          if (data.user.role === 'client') {
-            setLocation(next); // next = '/portale' o dal param ?next=
-          }
+          login(data.user, data.token, next);
+          // FIX: pulisce il token dall'URL dopo l'autenticazione
+          window.history.replaceState({}, '', next);
+        } else {
+          setLocation('/portale/login?error=invalid_token');
         }
       })
       .catch(() => setLocation('/portale/login?error=network'));
-  }, [location]);
+  }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -49,12 +58,21 @@ function AppContent() {
     </div>
   );
 
-  // ── Route portale cliente ─────────────────────────────────────────────────
+  // ── Route portale cliente ──────────────────────────────────────────────
   if (location.startsWith('/portale')) {
+    // La pagina /portale/accesso è gestita dall'useEffect sopra — non mostrare nulla
+    if (location === '/portale/accesso' || location.startsWith('/portale/accesso?')) {
+      return (
+        <div className="flex items-center justify-center h-screen bg-gray-50">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" />
+        </div>
+      );
+    }
+
     if (!user || user.role !== 'client') {
-      if (location === '/portale/accesso') return <div />;
       return <ClientLogin />;
     }
+
     return (
       <PortalLayout user={user} onLogout={logout}>
         <Toaster position="top-right" />
@@ -71,7 +89,7 @@ function AppContent() {
     );
   }
 
-  // ── Route staff ───────────────────────────────────────────────────────────
+  // ── Route staff ────────────────────────────────────────────────────────
   if (!user) return <Login />;
 
   return (

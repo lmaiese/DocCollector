@@ -1,5 +1,5 @@
 /**
- * DocCollector+ — PostgreSQL Schema (Sprint 0)
+ * DocCollector+ — PostgreSQL Schema (Sprint 0 + fix Sprint 1)
  * ORM: Drizzle ORM  |  DB: PostgreSQL 15+
  * Gerarchia: Tenant → User/Client → Practice → Request → Document
  */
@@ -75,6 +75,7 @@ export const users = pgTable('users', {
   isActive:    boolean('is_active').notNull().default(true),
   lastLoginAt: timestamp('last_login_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
+  // FIX: updatedAt era mancante — richiesto da updateUser controller
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   emailIdx:  uniqueIndex('users_email_idx').on(t.email),
@@ -85,6 +86,7 @@ export const users = pgTable('users', {
 // ─── Document Types ────────────────────────────────────────────────────────
 export const documentTypes = pgTable('document_types', {
   id:          uuid('id').primaryKey().defaultRandom(),
+  // NULL = tipo di sistema (condiviso tra tutti i tenant)
   tenantId:    uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   code:        text('code').notNull(),
   label:       text('label').notNull(),
@@ -95,6 +97,10 @@ export const documentTypes = pgTable('document_types', {
   sortOrder:   integer('sort_order').default(0),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
+  // Nota: PostgreSQL tratta NULL != NULL in unique index,
+  // quindi più tipi di sistema con stesso code sono bloccati solo
+  // se entrambi hanno tenantId non-null identico. I tipi di sistema
+  // (tenantId=NULL) non entrano mai in conflitto tra loro per design.
   tenantCodeIdx: uniqueIndex('doc_types_tenant_code_idx').on(t.tenantId, t.code),
 }));
 

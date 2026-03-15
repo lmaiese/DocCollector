@@ -15,22 +15,20 @@ import userRoutes      from './server/routes/users.routes.ts';
 import tenantRoutes    from './server/routes/tenants.routes.ts';
 import auditRoutes     from './server/routes/audit.routes.ts';
 import portalRoutes    from './server/routes/portal.routes.ts';
-import commentRoutes from './server/routes/comments.routes.ts';
+import commentRoutes   from './server/routes/comments.routes.ts';
+import practiceRoutes  from './server/routes/practices.routes.ts';
+import docTypeRoutes   from './server/routes/document-types.routes.ts';
 
-import cron            from 'node-cron';
-import practiceRoutes    from './server/routes/practices.routes.ts';
-import docTypeRoutes     from './server/routes/document-types.routes.ts';
-
+import cron from 'node-cron';
 import { db } from './src/db/index.pg.ts';
-import { requests, users, clients, tenants, documentTypes } from './src/db/schema.pg.ts';
-import { eq, and } from 'drizzle-orm';
+import { requests, users, clients, tenants, documentTypes, clientTokens } from './src/db/schema.pg.ts';
+import { eq, and, lt } from 'drizzle-orm';
 import { templates } from './server/services/email/templates.ts';
 
-// Dentro startServer(), dopo il cron dell'email worker:
+// ─── Cron: reminder scadenze (ogni mattina alle 08:00) ─────────────────────
 cron.schedule('0 8 * * *', async () => {
-  // Ogni mattina alle 8: controlla richieste in scadenza
-  const today    = new Date();
-  const targets  = [1, 3, 7]; // giorni rimanenti per cui mandare reminder
+  const today   = new Date();
+  const targets = [1, 3, 7];
 
   for (const daysLeft of targets) {
     const targetDate = new Date(today);
@@ -72,6 +70,18 @@ cron.schedule('0 8 * * *', async () => {
   }
 });
 
+// ─── FIX: Cron cleanup token scaduti (ogni notte alle 03:00) ───────────────
+// Senza questo i clientTokens si accumulano indefinitamente
+cron.schedule('0 3 * * *', async () => {
+  try {
+    const result = await db.delete(clientTokens).where(
+      lt(clientTokens.expiresAt, new Date())
+    );
+    console.log('[Cron] Token scaduti eliminati');
+  } catch (err) {
+    console.error('[Cron] Errore cleanup token:', err);
+  }
+});
 
 async function startServer() {
   await initDb();
@@ -83,20 +93,18 @@ async function startServer() {
   app.use(express.json());
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: new Date() }));
 
-  app.use('/api/auth',      authRoutes);
-  app.use('/api/dashboard', dashboardRoutes);
-  app.use('/api/clients',   clientRoutes);
-  app.use('/api/requests',  requestRoutes);
-  app.use('/api/documents', documentRoutes);
-  app.use('/api/users',     userRoutes);
-  app.use('/api/tenants',   tenantRoutes);
-  app.use('/api/audit',     auditRoutes);
-  app.use('/api/portal',    portalRoutes); 
+  app.use('/api/auth',           authRoutes);
+  app.use('/api/dashboard',      dashboardRoutes);
+  app.use('/api/clients',        clientRoutes);
+  app.use('/api/requests',       requestRoutes);
+  app.use('/api/documents',      documentRoutes);
+  app.use('/api/users',          userRoutes);
+  app.use('/api/tenants',        tenantRoutes);
+  app.use('/api/audit',          auditRoutes);
+  app.use('/api/portal',         portalRoutes);
   app.use('/api/practices',      practiceRoutes);
   app.use('/api/document-types', docTypeRoutes);
   app.use('/api/requests/:requestId/comments', commentRoutes);
-
-  
 
   // Worker email: ogni 2 minuti processa la coda
   cron.schedule('*/2 * * * *', () => emailService.processQueue());

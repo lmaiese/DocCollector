@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Upload, CheckCircle, Clock, AlertTriangle,
   XCircle, Eye, MessageSquare, ChevronDown, ChevronUp,
@@ -9,19 +9,18 @@ import DeadlineBadge from '../components/DeadlineBadge';
 import { API_BASE_URL } from '../config';
 
 const STATUS_CONFIG = {
-  pending:      { label: 'Da caricare',   icon: Clock,         color: 'text-yellow-600 bg-yellow-50' },
-  uploaded:     { label: 'Caricato',      icon: Eye,           color: 'text-blue-600 bg-blue-50' },
-  under_review: { label: 'In revisione',  icon: Eye,           color: 'text-purple-600 bg-purple-50' },
-  approved:     { label: 'Approvato',     icon: CheckCircle,   color: 'text-green-600 bg-green-50' },
-  rejected:     { label: 'Da ricaricare', icon: XCircle,       color: 'text-red-600 bg-red-50' },
+  pending:      { label: 'Da caricare',   icon: Clock,       color: 'text-yellow-600 bg-yellow-50' },
+  uploaded:     { label: 'Caricato',      icon: Eye,         color: 'text-blue-600 bg-blue-50' },
+  under_review: { label: 'In revisione',  icon: Eye,         color: 'text-purple-600 bg-purple-50' },
+  approved:     { label: 'Approvato',     icon: CheckCircle, color: 'text-green-600 bg-green-50' },
+  rejected:     { label: 'Da ricaricare', icon: XCircle,     color: 'text-red-600 bg-red-50' },
 };
 
 export default function PortalRequests() {
-  const [requests, setRequests]     = useState<any[]>([]);
-  const [uploading, setUploading]   = useState<string | null>(null);
-  const [expanded, setExpanded]     = useState<string | null>(null);
-  const [comment, setComment]       = useState('');
-  const [filterStatus, setFilter]   = useState('');
+  const [requests, setRequests]   = useState<any[]>([]);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [expanded, setExpanded]   = useState<string | null>(null);
+  const [filterStatus, setFilter] = useState('');
 
   const fetchRequests = () => {
     const q = filterStatus ? `?status=${filterStatus}` : '';
@@ -44,17 +43,8 @@ export default function PortalRequests() {
     } finally { setUploading(null); }
   };
 
-  const handleComment = async (requestId: string) => {
-    if (!comment.trim()) return;
-    try {
-      await api.post(`/api/portal/requests/${requestId}/comments`, { body: comment });
-      toast.success('Messaggio inviato');
-      setComment('');
-    } catch (err: any) { toast.error(err.message); }
-  };
-
-  const pending  = requests.filter(r => ['pending','rejected'].includes(r.status));
-  const others   = requests.filter(r => !['pending','rejected'].includes(r.status));
+  const pending = requests.filter(r => ['pending', 'rejected'].includes(r.status));
+  const others  = requests.filter(r => !['pending', 'rejected'].includes(r.status));
 
   return (
     <div className="space-y-6">
@@ -77,11 +67,12 @@ export default function PortalRequests() {
             ⚠️ Azione richiesta ({pending.length})
           </h3>
           <div className="space-y-3">
-            {pending.map(req => <RequestCard key={req.id} req={req}
-              uploading={uploading} onUpload={handleUpload}
-              expanded={expanded} setExpanded={setExpanded}
-              comment={comment} setComment={setComment}
-              onComment={handleComment} />)}
+            {pending.map(req => (
+              <RequestCard key={req.id} req={req}
+                uploading={uploading} onUpload={handleUpload}
+                expanded={expanded} setExpanded={setExpanded}
+                onCommentSent={fetchRequests} />
+            ))}
           </div>
         </section>
       )}
@@ -92,11 +83,12 @@ export default function PortalRequests() {
             Storico ({others.length})
           </h3>
           <div className="space-y-3">
-            {others.map(req => <RequestCard key={req.id} req={req}
-              uploading={uploading} onUpload={handleUpload}
-              expanded={expanded} setExpanded={setExpanded}
-              comment={comment} setComment={setComment}
-              onComment={handleComment} />)}
+            {others.map(req => (
+              <RequestCard key={req.id} req={req}
+                uploading={uploading} onUpload={handleUpload}
+                expanded={expanded} setExpanded={setExpanded}
+                onCommentSent={fetchRequests} />
+            ))}
           </div>
         </section>
       )}
@@ -105,18 +97,41 @@ export default function PortalRequests() {
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
           <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
           <p className="text-gray-600 font-medium">Nessun documento richiesto al momento.</p>
-          <p className="text-gray-400 text-sm mt-1">Lo studio ti avviserà via email quando ci sarà qualcosa da caricare.</p>
+          <p className="text-gray-400 text-sm mt-1">
+            Lo studio ti avviserà via email quando ci sarà qualcosa da caricare.
+          </p>
         </div>
       )}
     </div>
   );
 }
 
-function RequestCard({ req, uploading, onUpload, expanded, setExpanded, comment, setComment, onComment }: any) {
-  const cfg     = STATUS_CONFIG[req.status as keyof typeof STATUS_CONFIG];
-  const Icon    = cfg.icon;
-  const isOpen  = expanded === req.id;
+// ─── RequestCard: stato commento isolato per card ─────────────────────────
+function RequestCard({ req, uploading, onUpload, expanded, setExpanded, onCommentSent }: {
+  req: any;
+  uploading: string | null;
+  onUpload: (id: string, file: File) => void;
+  expanded: string | null;
+  setExpanded: (id: string | null) => void;
+  onCommentSent: () => void;
+}) {
+  // FIX: ogni card ha il suo stato commento — prima era condiviso nel parent
+  const [comment, setComment] = useState('');
+
+  const cfg    = STATUS_CONFIG[req.status as keyof typeof STATUS_CONFIG];
+  const Icon   = cfg.icon;
+  const isOpen = expanded === req.id;
   const canUpload = ['pending', 'rejected'].includes(req.status);
+
+  const handleComment = async () => {
+    if (!comment.trim()) return;
+    try {
+      await api.post(`/api/portal/requests/${req.id}/comments`, { body: comment });
+      toast.success('Messaggio inviato');
+      setComment('');
+      onCommentSent();
+    } catch (err: any) { toast.error(err.message); }
+  };
 
   return (
     <div className={`bg-white rounded-xl border shadow-sm transition-all ${
@@ -138,7 +153,10 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, comment,
               <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${cfg.color}`}>
                 <Icon className="w-3 h-3" />{cfg.label}
               </span>
-              <DeadlineBadge deadline={req.deadline} status={req.status === 'approved' ? 'uploaded' : 'pending'} />
+              <DeadlineBadge
+                deadline={req.deadline}
+                status={req.status === 'approved' ? 'uploaded' : 'pending'}
+              />
             </div>
             {req.status === 'rejected' && req.rejectionReason && (
               <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
@@ -167,28 +185,39 @@ function RequestCard({ req, uploading, onUpload, expanded, setExpanded, comment,
       </div>
 
       {isOpen && (
-        <div className="border-t border-gray-100 p-5 bg-gray-50 rounded-b-xl">
+        <div className="border-t border-gray-100 p-5 bg-gray-50 rounded-b-xl space-y-3">
           {req.notes && (
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-600">
               <strong>Note dello studio:</strong> {req.notes}
             </p>
           )}
           {req.documentFilename && (
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-600">
               <strong>File caricato:</strong>{' '}
-              <a href={`${API_BASE_URL}/api/portal/documents/${req.documentId}/download`}
-                className="text-indigo-600 hover:underline" download>
+              {/* FIX: usa /api/portal/documents/:id/download non /api/documents */}
+              <a
+                href={`${API_BASE_URL}/api/portal/documents/${req.documentId}/download`}
+                className="text-indigo-600 hover:underline"
+                download
+              >
                 {req.documentFilename}
               </a>
             </p>
           )}
           <div className="flex gap-2">
-            <input type="text" placeholder="Scrivi un messaggio allo studio..."
-              value={comment} onChange={e => setComment(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && onComment(req.id)}
-              className="flex-1 border rounded-lg px-3 py-2 text-sm" />
-            <button onClick={() => onComment(req.id)}
-              className="bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded-lg text-sm font-medium">
+            <input
+              type="text"
+              placeholder="Scrivi un messaggio allo studio..."
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleComment()}
+              className="flex-1 border rounded-lg px-3 py-2 text-sm"
+            />
+            <button
+              onClick={handleComment}
+              disabled={!comment.trim()}
+              className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 px-3 py-2 rounded-lg text-sm font-medium"
+            >
               <MessageSquare className="w-4 h-4" />
             </button>
           </div>

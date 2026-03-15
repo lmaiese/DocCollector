@@ -13,7 +13,8 @@ interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
-  login: (userData: AuthUser, token: string) => void;
+  // FIX: redirectTo è ora il terzo parametro opzionale usato effettivamente
+  login: (userData: AuthUser, token: string, redirectTo?: string) => void;
   logout: () => void;
   isLoading: boolean;
 }
@@ -41,7 +42,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(tok);
     localStorage.setItem('user',  JSON.stringify(userData));
     localStorage.setItem('token', tok);
-    setLocation(redirectTo ?? (userData.role === 'client' ? '/portale' : '/'));
+
+    // FIX: priorità: 1) redirectTo esplicito, 2) default per ruolo
+    if (redirectTo) {
+      setLocation(redirectTo);
+    } else {
+      setLocation(userData.role === 'client' ? '/portale' : '/');
+    }
   };
 
   const logout = () => {
